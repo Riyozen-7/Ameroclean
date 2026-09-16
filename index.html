@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Amero — Premium Quality Clothing</title>
+  <meta name="description" content="Amero — Fewer pieces, better standards. Premium shirts and t-shirts from Chattogram.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;1,300;1,400&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+  <!-- NAVBAR -->
+  <nav class="navbar" id="navbar">
+    <div class="navbar-inner">
+      <a href="index.html" class="nav-logo">Amero.</a>
+      <div class="nav-links" id="navLinks">
+        <a href="index.html" class="nav-link">Home</a>
+        <a href="shop.html" class="nav-link">Shop</a>
+        <a href="contact.html" class="nav-link">About</a>
+        <a href="cart.html" class="nav-cart">
+          <svg viewBox="0 0 24 24"><path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 01-8 0"/></svg>
+          <span>Cart</span>
+          <span class="cart-count" id="navCartCount">0</span>
+        </a>
+      </div>
+      <button class="menu-toggle" id="menuToggle" aria-label="Menu">
+        <span></span><span></span><span></span>
+      </button>
+    </div>
+  </nav>
+
+  <!-- HERO -->
+  <section class="hero">
+    <div class="hero-content">
+      <span class="hero-badge">New Drop — Spring 2026</span>
+      <h1 class="hero-title">Fewer pieces.<br>Better standards.</h1>
+      <p class="hero-desc">Small-batch essentials crafted in Chattogram. Premium fabrics, honest sizing, and quality you can feel.</p>
+      <a href="shop.html" class="btn btn-primary">Shop the Collection</a>
+    </div>
+    <img class="hero-image" src="images/product-2/front.jpg.jpeg" alt="Amero premium t-shirt" loading="eager">
+  </section>
+
+  <!-- BRAND QUOTE -->
+  <section class="brand-quote reveal">
+    <blockquote>"We don't chase trends. We make pieces worth keeping."</blockquote>
+    <p class="quote-subtitle">Premium fabrics · Honest sizing · Built on trust</p>
+  </section>
+
+  <!-- FEATURED PRODUCTS -->
+  <section class="page-section">
+    <div class="container">
+      <div class="section-header reveal">
+        <h2>Featured</h2>
+        <p>Handpicked for the season</p>
+      </div>
+      <div class="products-grid" id="featuredGrid"></div>
+      <div style="text-align: center; margin-top: var(--sp-3xl);" class="reveal">
+        <a href="shop.html" class="btn btn-outline">View All Products</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- FOOTER -->
+  <footer class="footer">
+    <div class="container">
+      <div class="footer-inner">
+        <div>
+          <div class="footer-brand">Amero.</div>
+          <div class="footer-tagline">Simple, clean, made to last.</div>
+        </div>
+        <div class="footer-links">
+          <a href="shop.html">Shop</a>
+          <a href="contact.html">Contact</a>
+          <a href="cart.html">Cart</a>
+        </div>
+      </div>
+      <div class="footer-copy">&copy; 2026 Amero. All rights reserved.</div>
+    </div>
+  </footer>
+
+  <!-- SCRIPTS -->
+  <script src="js/app.js"></script>
+  <script>
+    /* Render the first 4 products as "featured" on the home page */
+    (function () {
+      const grid = document.getElementById('featuredGrid');
+      if (!grid) return;
+
+      const featured = products.slice(0, 4);
+
+      grid.innerHTML = featured.map(p => {
+        return `
+          <a href="product.html?id=${p.id}" class="product-card reveal" data-id="${p.id}">
+            <div class="product-img">
+              <img src="${p.img}" alt="${p.name}" loading="lazy">
+            </div>
+            <div class="product-info">
+              <h3 class="product-name">${p.name}</h3>
+              <span class="product-price">${CURRENCY}${p.price}</span>
+            </div>
+          </a>
+        `;
+      }).join('');
+
+      initScrollReveal();
+    })();
+  </script>
+</body>
+</html>

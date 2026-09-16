@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title id="pageTitle">Product — Amero</title>
+  <meta name="description" content="Amero premium clothing product.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;1,300;1,400&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+  <!-- NAVBAR -->
+  <nav class="navbar" id="navbar">
+    <div class="navbar-inner">
+      <a href="index.html" class="nav-logo">Amero.</a>
+      <div class="nav-links" id="navLinks">
+        <a href="index.html" class="nav-link">Home</a>
+        <a href="shop.html" class="nav-link">Shop</a>
+        <a href="contact.html" class="nav-link">About</a>
+        <a href="cart.html" class="nav-cart">
+          <svg viewBox="0 0 24 24"><path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 01-8 0"/></svg>
+          <span>Cart</span>
+          <span class="cart-count" id="navCartCount">0</span>
+        </a>
+      </div>
+      <button class="menu-toggle" id="menuToggle" aria-label="Menu">
+        <span></span><span></span><span></span>
+      </button>
+    </div>
+  </nav>
+
+  <!-- PRODUCT DETAIL -->
+  <section class="product-page">
+    <div class="container">
+      <nav class="breadcrumb" id="breadcrumb">
+        <a href="index.html">Home</a>
+        <span class="breadcrumb-sep">&rsaquo;</span>
+        <a href="shop.html">Shop</a>
+        <span class="breadcrumb-sep">&rsaquo;</span>
+        <span class="breadcrumb-current" id="breadcrumbName"></span>
+      </nav>
+
+      <div class="product-detail" id="productDetail">
+        <!-- Rendered by JS -->
+      </div>
+
+      <div style="text-align: center; margin-top: var(--sp-4xl);" class="reveal">
+        <h2 style="font-family: var(--font-display); font-size: var(--fs-2xl); font-weight: var(--fw-light); color: var(--ink); margin-bottom: var(--sp-lg);">You may also like</h2>
+        <div class="products-grid" id="relatedGrid"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- FOOTER -->
+  <footer class="footer">
+    <div class="container">
+      <div class="footer-inner">
+        <div>
+          <div class="footer-brand">Amero.</div>
+          <div class="footer-tagline">Simple, clean, made to last.</div>
+        </div>
+        <div class="footer-links">
+          <a href="shop.html">Shop</a>
+          <a href="contact.html">Contact</a>
+          <a href="cart.html">Cart</a>
+        </div>
+      </div>
+      <div class="footer-copy">&copy; 2026 Amero. All rights reserved.</div>
+    </div>
+  </footer>
+
+  <!-- SCRIPTS -->
+  <script src="js/app.js"></script>
+  <script>
+    /* PRODUCT PAGE — render detail from ?id= query param */
+    (function () {
+      const params = new URLSearchParams(window.location.search);
+      const productId = parseInt(params.get('id'));
+      const product = products.find(p => p.id === productId);
+
+      const container = document.getElementById('productDetail');
+      if (!product) {
+        container.innerHTML = '<div class="empty-state" style="grid-column:1/-1"><p>Product not found.</p><a href="shop.html" class="btn btn-ghost">Back to shop</a></div>';
+        document.getElementById('breadcrumbName').textContent = 'Not found';
+        return;
+      }
+
+      document.title = product.name + ' — Amero';
+      document.getElementById('pageTitle').textContent = product.name + ' — Amero';
+      document.getElementById('breadcrumbName').textContent = product.name;
+
+      let selectedSize = null;
+      let qty = 1;
+      let galleryActive = 0;
+
+      function render() {
+        if (!selectedSize) {
+          const firstAvail = product.sizes.find(s => stockRemaining(product.id, s.size) > 0);
+          selectedSize = firstAvail ? firstAvail.size : product.sizes[0].size;
+        }
+        const stockLeft = stockRemaining(product.id, selectedSize);
+        qty = Math.max(1, Math.min(qty, Math.max(1, stockLeft)));
+
+        const chips = product.sizes.map(s => {
+          const rem = stockRemaining(product.id, s.size);
+          return `<button class="size-chip${s.size === selectedSize ? ' selected' : ''}" data-size="${s.size}" ${rem <= 0 ? 'disabled' : ''}>${s.size}${rem <= 0 ? ' · Out' : ''}</button>`;
+        }).join('');
+
+        container.innerHTML = `
+          <div class="product-gallery reveal in-view">
+            <div class="gallery-main" onclick="openGallery(${product.id})">
+              <img src="${product.images[galleryActive]}" alt="${product.name}">
+            </div>
+            <div class="gallery-thumbs">
+              ${product.images.map((src, i) => `
+                <button class="gallery-thumb${i === galleryActive ? ' active' : ''}" onclick="setGalleryImage(${i})">
+                  <img src="${src}" alt="">
+                </button>
+              `).join('')}
+            </div>
+          </div>
+
+          <div class="product-detail-info reveal in-view">
+            <div class="stock-badge" style="margin-bottom: var(--sp-sm);">Only 1 piece per size</div>
+            <h1 class="product-name">${product.name}</h1>
+            <div class="product-price">${CURRENCY}${product.price}</div>
+            <p class="product-desc">${product.desc}</p>
+
+            <div class="detail-section">
+              <span class="detail-label">Size</span>
+              <div class="size-chips" id="sizeChips">
+                ${chips}
+              </div>
+            </div>
+
+            <div class="detail-section">
+              <span class="detail-label">Quantity</span>
+              <div class="qty-selector">
+                <button class="qty-btn" onclick="changeQtySelector(-1)" aria-label="Decrease">&minus;</button>
+                <span class="qty-value" id="qtyValue">${qty}</span>
+                <button class="qty-btn" onclick="changeQtySelector(1)" aria-label="Increase">+</button>
+              </div>
+            </div>
+
+            <button class="btn btn-primary" id="addToCartBtn" ${stockLeft <= 0 ? 'disabled' : ''}>
+              ${stockLeft > 0 ? 'Add to Cart' : 'Sold Out'}
+            </button>
+
+            <div class="fabric-details">
+              <h4>Quality &amp; Details</h4>
+              <ul>
+                <li>${product.fabric}</li>
+                <li>Quality: ${product.quality}</li>
+                <li>Hand-checked before shipping</li>
+                <li>1 piece per size per run</li>
+              </ul>
+            </div>
+          </div>
+        `;
+
+        /* Size chip events (inline handlers don't clash with re-renders) */
+        document.getElementById('sizeChips').addEventListener('click', (e) => {
+          const chip = e.target.closest('.size-chip');
+          if (!chip || chip.disabled) return;
+          selectedSize = chip.dataset.size;
+          render();
+        });
+
+        document.getElementById('addToCartBtn').addEventListener('click', () => {
+          if (addToCart(product.id, selectedSize, qty)) {
+            const btn = document.getElementById('addToCartBtn');
+            btn.classList.add('added');
+            btn.textContent = 'Added to Cart';
+            setTimeout(() => {
+              btn.classList.remove('added');
+              btn.textContent = 'Add to Cart';
+            }, 1200);
+            showToast('Added to cart');
+          }
+        });
+      }
+
+      /* Gallery thumbnail switching */
+      window.setGalleryImage = function (i) {
+        galleryActive = i;
+        render();
+      };
+
+      window.changeQtySelector = function (delta) {
+        const max = stockRemaining(product.id, selectedSize);
+        qty = Math.max(1, Math.min(qty + delta, Math.max(1, max)));
+        document.getElementById('qtyValue').textContent = qty;
+      };
+
+      render();
+      initScrollReveal();
+
+      /* Related products: same category, excluding current */
+      const related = products.filter(p => p.category === product.category && p.id !== product.id).slice(0, 3);
+      const relatedGrid = document.getElementById('relatedGrid');
+
+      if (related.length) {
+        relatedGrid.innerHTML = related.map(p => {
+          return `
+            <a href="product.html?id=${p.id}" class="product-card reveal" data-id="${p.id}">
+              <div class="product-img">
+                <img src="${p.img}" alt="${p.name}" loading="lazy">
+              </div>
+              <div class="product-info">
+                <h3 class="product-name">${p.name}</h3>
+                <span class="product-price">${CURRENCY}${p.price}</span>
+              </div>
+            </a>
+          `;
+        }).join('');
+      } else {
+        relatedGrid.innerHTML = '<div class="empty-state"><p>More pieces coming soon.</p></div>';
+      }
+      initScrollReveal();
+    })();
+  </script>
+</body>
+</html>

@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Shop — Amero</title>
+  <meta name="description" content="Browse all Amero premium shirts and t-shirts.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;1,300;1,400&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+  <!-- NAVBAR -->
+  <nav class="navbar" id="navbar">
+    <div class="navbar-inner">
+      <a href="index.html" class="nav-logo">Amero.</a>
+      <div class="nav-links" id="navLinks">
+        <a href="index.html" class="nav-link">Home</a>
+        <a href="shop.html" class="nav-link">Shop</a>
+        <a href="contact.html" class="nav-link">About</a>
+        <a href="cart.html" class="nav-cart">
+          <svg viewBox="0 0 24 24"><path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 01-8 0"/></svg>
+          <span>Cart</span>
+          <span class="cart-count" id="navCartCount">0</span>
+        </a>
+      </div>
+      <button class="menu-toggle" id="menuToggle" aria-label="Menu">
+        <span></span><span></span><span></span>
+      </button>
+    </div>
+  </nav>
+
+  <!-- PAGE HEADER -->
+  <header class="page-section" style="padding-top: calc(var(--nav-height) + var(--sp-3xl)); padding-bottom: var(--sp-2xl);">
+    <div class="container">
+      <div class="section-header reveal">
+        <h2>Shop</h2>
+        <p>All Products</p>
+      </div>
+    </div>
+  </header>
+
+  <!-- FILTER BAR -->
+  <section class="page-section" style="padding-top: 0;">
+    <div class="container">
+      <div class="filter-bar reveal">
+        <div class="filter-chips" id="categoryFilter">
+          <button class="filter-chip active" data-category="all">All</button>
+          <button class="filter-chip" data-category="shirts">Shirts</button>
+          <button class="filter-chip" data-category="t-shirts">T-Shirts</button>
+        </div>
+        <div class="filter-group">
+          <label for="sortSelect">Sort by</label>
+          <select id="sortSelect">
+            <option value="default">Default</option>
+            <option value="price-asc">Price: Low to High</option>
+            <option value="price-desc">Price: High to Low</option>
+            <option value="name">Name (A&ndash;Z)</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="product-count" id="productCount"></div>
+
+      <div class="products-grid" id="productsGrid"></div>
+    </div>
+  </section>
+
+  <!-- FOOTER -->
+  <footer class="footer">
+    <div class="container">
+      <div class="footer-inner">
+        <div>
+          <div class="footer-brand">Amero.</div>
+          <div class="footer-tagline">Simple, clean, made to last.</div>
+        </div>
+        <div class="footer-links">
+          <a href="shop.html">Shop</a>
+          <a href="contact.html">Contact</a>
+          <a href="cart.html">Cart</a>
+        </div>
+      </div>
+      <div class="footer-copy">&copy; 2026 Amero. All rights reserved.</div>
+    </div>
+  </footer>
+
+  <!-- SCRIPTS -->
+  <script src="js/app.js"></script>
+  <script>
+    /* SHOP PAGE — filter, sort, and render all products */
+    (function () {
+      const grid = document.getElementById('productsGrid');
+      const countEl = document.getElementById('productCount');
+
+      let activeCategory = 'all';
+      let sortKey = 'default';
+
+      function getFilteredProducts() {
+        let list = products.filter(p => activeCategory === 'all' || p.category === activeCategory);
+        switch (sortKey) {
+          case 'price-asc':
+            list.sort((a, b) => a.price - b.price);
+            break;
+          case 'price-desc':
+            list.sort((a, b) => b.price - a.price);
+            break;
+          case 'name':
+            list.sort((a, b) => a.name.localeCompare(b.name));
+            break;
+        }
+        return list;
+      }
+
+      function render() {
+        const list = getFilteredProducts();
+        countEl.textContent = list.length + ' product' + (list.length !== 1 ? 's' : '');
+
+        if (list.length === 0) {
+          grid.innerHTML = '<div class="empty-state reveal in-view"><p>No products found.</p><a href="shop.html" class="btn btn-ghost">Reset filters</a></div>';
+          return;
+        }
+
+        grid.innerHTML = list.map(p => {
+          return `
+            <a href="product.html?id=${p.id}" class="product-card reveal" data-id="${p.id}">
+              <div class="product-img">
+                <img src="${p.img}" alt="${p.name}" loading="lazy">
+              </div>
+              <div class="product-info">
+                <h3 class="product-name">${p.name}</h3>
+                <span class="product-price">${CURRENCY}${p.price}</span>
+              </div>
+            </a>
+          `;
+        }).join('');
+
+        initScrollReveal();
+      }
+
+      /* Category filter chips */
+      document.getElementById('categoryFilter').addEventListener('click', (e) => {
+        const chip = e.target.closest('.filter-chip');
+        if (!chip) return;
+        document.querySelectorAll('#categoryFilter .filter-chip').forEach(c => c.classList.remove('active'));
+        chip.classList.add('active');
+        activeCategory = chip.dataset.category;
+        render();
+      });
+
+      /* Sort select */
+      document.getElementById('sortSelect').addEventListener('change', (e) => {
+        sortKey = e.target.value;
+        render();
+      });
+
+      render();
+    })();
+  </script>
+</body>
+</html>

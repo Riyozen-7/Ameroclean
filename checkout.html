@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Checkout — Amero</title>
+  <meta name="description" content="Complete your Amero order.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;1,300;1,400&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+  <!-- NAVBAR -->
+  <nav class="navbar" id="navbar">
+    <div class="navbar-inner">
+      <a href="index.html" class="nav-logo">Amero.</a>
+      <div class="nav-links" id="navLinks">
+        <a href="index.html" class="nav-link">Home</a>
+        <a href="shop.html" class="nav-link">Shop</a>
+        <a href="contact.html" class="nav-link">About</a>
+        <a href="cart.html" class="nav-cart">
+          <svg viewBox="0 0 24 24"><path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 01-8 0"/></svg>
+          <span>Cart</span>
+          <span class="cart-count" id="navCartCount">0</span>
+        </a>
+      </div>
+      <button class="menu-toggle" id="menuToggle" aria-label="Menu">
+        <span></span><span></span><span></span>
+      </button>
+    </div>
+  </nav>
+
+  <!-- CHECKOUT -->
+  <section class="checkout-page">
+    <div class="container">
+      <div class="section-header reveal" style="text-align:left;">
+        <h2>Checkout</h2>
+      </div>
+
+      <!-- Empty cart guard -->
+      <div class="cart-empty" id="checkoutEmpty" style="display:none;">
+        <svg viewBox="0 0 24 24"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 002 1.61h9.72a2 2 0 002-1.61L23 6H6"/></svg>
+        <p>Your cart is empty. Add something first.</p>
+        <a href="shop.html" class="btn btn-primary">Browse Products</a>
+      </div>
+
+      <div class="checkout-layout" id="checkoutLayout">
+        <!-- Customer + delivery form -->
+        <form class="checkout-form reveal" id="checkoutForm" novalidate>
+          <div class="detail-label" style="font-size: var(--fs-sm);">1 &mdash; Delivery Details</div>
+
+          <div class="form-group">
+            <label for="custName">Full Name</label>
+            <input type="text" id="custName" name="name" placeholder="Your full name" autocomplete="name">
+            <span class="error-msg" id="errName">Please enter your name.</span>
+          </div>
+
+          <div class="form-group">
+            <label for="custPhone">Phone Number</label>
+            <input type="tel" id="custPhone" name="phone" placeholder="01XXXXXXXXX" autocomplete="tel">
+            <span class="error-msg" id="errPhone">Enter a valid Bangladeshi number (01XXXXXXXXX).</span>
+          </div>
+
+          <div class="form-group">
+            <label for="custAddress">Delivery Address</label>
+            <textarea id="custAddress" name="address" placeholder="House, road, area, city" autocomplete="street-address"></textarea>
+            <span class="error-msg" id="errAddress">Please enter your delivery address.</span>
+          </div>
+
+          <div class="form-group">
+            <label for="deliveryArea">Delivery Zone</label>
+            <select id="deliveryArea" name="deliveryArea">
+              <option value="">Select your zone&hellip;</option>
+              <option value="chittagong">Inside Chittagong (&plus;৳70)</option>
+              <option value="outside">Outside Chittagong (&plus;৳120)</option>
+            </select>
+            <span class="error-msg" id="errArea">Please select a delivery zone.</span>
+          </div>
+
+          <div class="form-group">
+            <label for="custNotes">Order Notes (optional)</label>
+            <textarea id="custNotes" name="notes" placeholder="Anything we should know?"></textarea>
+          </div>
+
+          <div class="detail-label" style="font-size: var(--fs-sm);">2 &mdash; Payment</div>
+
+          <div class="payment-methods">
+            <div class="payment-option">
+              <input type="radio" id="payCod" name="paymentMethod" value="cod" checked>
+              <label for="payCod">Cash on Delivery</label>
+            </div>
+            <div class="payment-option">
+              <input type="radio" id="payBkash" name="paymentMethod" value="bkash">
+              <label for="payBkash">bKash</label>
+            </div>
+            <div class="payment-option">
+              <input type="radio" id="payNagad" name="paymentMethod" value="nagad">
+              <label for="payNagad">Nagad</label>
+            </div>
+          </div>
+
+          <div class="payment-instructions" id="paymentInstructions">
+            <p id="paymentInstructionsText"></p>
+          </div>
+
+          <div class="form-group txn-id-group" id="txnGroup">
+            <label for="txnId">Transaction ID</label>
+            <input type="text" id="txnId" name="txnId" placeholder="Enter your Transaction ID">
+            <span class="error-msg" id="errTxnId">Please enter the Transaction ID.</span>
+          </div>
+
+          <button type="submit" class="btn btn-primary" id="placeOrderBtn" style="margin-top: var(--sp-md);">Place Order</button>
+        </form>
+
+        <!-- Order summary -->
+        <div class="order-summary reveal" id="orderSummary">
+          <h3>Order Summary</h3>
+          <div id="summaryItems"></div>
+          <div class="billing-row">
+            <span>Subtotal</span>
+            <span id="sumSubtotal">৳0</span>
+          </div>
+          <div class="billing-row">
+            <span>Delivery</span>
+            <span id="sumDelivery">—</span>
+          </div>
+          <div class="billing-row total">
+            <span>Total</span>
+            <span id="sumTotal">৳0</span>
+          </div>
+          <p class="billing-note">For bKash/Nagad, send the total to <strong id="payNumberNote">01880471287</strong> and enter the Transaction ID.</p>
+        </div>
+      </div>
+
+      <!-- Order confirmation -->
+      <div class="order-confirmation" id="orderConfirmation">
+        <div class="confirm-icon">
+          <svg viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg>
+        </div>
+        <h2>Thank you, <span id="confirmName"></span>!</h2>
+        <p>Your order has been placed.</p>
+        <p class="confirm-detail" id="confirmDetail"></p>
+        <a href="shop.html" class="btn btn-outline">Continue Shopping</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- FOOTER -->
+  <footer class="footer">
+    <div class="container">
+      <div class="footer-inner">
+        <div>
+          <div class="footer-brand">Amero.</div>
+          <div class="footer-tagline">Simple, clean, made to last.</div>
+        </div>
+        <div class="footer-links">
+          <a href="shop.html">Shop</a>
+          <a href="contact.html">Contact</a>
+          <a href="cart.html">Cart</a>
+        </div>
+      </div>
+      <div class="footer-copy">&copy; 2026 Amero. All rights reserved.</div>
+    </div>
+  </footer>
+
+  <!-- SCRIPTS -->
+  <script src="js/app.js"></script>
+  <script>
+    /* CHECKOUT PAGE — validation, payment instructions, order placement */
+    (function () {
+      const layout = document.getElementById('checkoutLayout');
+      const emptyEl = document.getElementById('checkoutEmpty');
+      const form = document.getElementById('checkoutForm');
+      const summaryItems = document.getElementById('summaryItems');
+
+      /* Guard: if cart empty, show empty message, hide form */
+      if (cart.length === 0) {
+        emptyEl.style.display = 'block';
+        layout.style.display = 'none';
+        document.getElementById('placeOrderBtn').disabled = true;
+      }
+
+      function formatMoney(n) {
+        return CURRENCY + n.toFixed(0);
+      }
+
+      function renderSummary() {
+        const subtotal = getCartTotal();
+        const delivery = parseInt(document.getElementById('deliveryArea').value === 'chittagong' ? DELIVERY_FEES.chittagong : (document.getElementById('deliveryArea').value === 'outside' ? DELIVERY_FEES.outside : 0));
+        const total = subtotal + delivery;
+
+        document.getElementById('sumSubtotal').textContent = formatMoney(subtotal);
+        document.getElementById('sumDelivery').textContent = delivery > 0 ? formatMoney(delivery) : '—';
+        document.getElementById('sumTotal').textContent = formatMoney(total);
+
+        if (cart.length === 0) {
+          summaryItems.innerHTML = '<div class="order-empty">No items in cart.</div>';
+          return;
+        }
+        summaryItems.innerHTML = cart.map(item => `
+          <div class="order-item">
+            <div class="order-item-img"><img src="${item.img}" alt="${item.name}"></div>
+            <div class="order-item-info">
+              <div class="order-item-name">${item.name}</div>
+              <div class="order-item-meta">Size ${item.size} · Qty ${item.qty}</div>
+            </div>
+            <div class="order-item-price">${formatMoney(item.price * item.qty)}</div>
+          </div>
+        `).join('');
+      }
+
+      /* Delivery area -> update summary */
+      document.getElementById('deliveryArea').addEventListener('change', renderSummary);
+
+      /* Payment method -> show instructions + txn field for bKash/Nagad */
+      const paymentInstructions = document.getElementById('paymentInstructions');
+      const paymentInstructionsText = document.getElementById('paymentInstructionsText');
+      const txnGroup = document.getElementById('txnGroup');
+
+      document.querySelectorAll('input[name="paymentMethod"]').forEach(radio => {
+        radio.addEventListener('change', () => {
+          const method = document.querySelector('input[name="paymentMethod"]:checked').value;
+          if (method === 'bkash' || method === 'nagad') {
+            paymentInstructionsText.innerHTML = `Send the total amount to <strong>${PAYMENT_NUMBER}</strong> (${PAYMENT_LABELS[method]} — Send Money), then enter the Transaction ID below.`;
+            paymentInstructions.classList.add('visible');
+            txnGroup.classList.add('visible');
+          } else {
+            paymentInstructions.classList.remove('visible');
+            txnGroup.classList.remove('visible');
+          }
+        });
+      });
+
+      function showError(id) {
+        document.getElementById(id).classList.add('visible');
+      }
+      function hideError(id) {
+        document.getElementById(id).classList.remove('visible');
+      }
+
+      form.addEventListener('submit', function (e) {
+        e.preventDefault();
+        updateNavCartCount();
+
+        if (cart.length === 0) {
+          showToast('Your cart is empty');
+          return;
+        }
+
+        const name = document.getElementById('custName');
+        const phone = document.getElementById('custPhone');
+        const address = document.getElementById('custAddress');
+        const area = document.getElementById('deliveryArea');
+        const method = document.querySelector('input[name="paymentMethod"]:checked').value;
+        const txnId = document.getElementById('txnId');
+
+        let valid = true;
+
+        /* Name */
+        if (!name.value.trim()) { name.classList.add('error'); showError('errName'); valid = false; }
+        else { name.classList.remove('error'); hideError('errName'); }
+
+        /* Phone */
+        const cleanPhone = phone.value.trim().replace(/\s+/g, '');
+        if (!/^01[3-9]\d{8}$/.test(cleanPhone)) { phone.classList.add('error'); showError('errPhone'); valid = false; }
+        else { phone.classList.remove('error'); hideError('errPhone'); }
+
+        /* Address */
+        if (!address.value.trim()) { address.classList.add('error'); showError('errAddress'); valid = false; }
+        else { address.classList.remove('error'); hideError('errAddress'); }
+
+        /* Delivery zone */
+        if (!area.value) { area.classList.add('error'); showError('errArea'); valid = false; }
+        else { area.classList.remove('error'); hideError('errArea'); }
+
+        /* Txn ID for bKash/Nagad */
+        if (method === 'bkash' || method === 'nagad') {
+          if (!txnId.value.trim()) { txnId.classList.add('error'); showError('errTxnId'); valid = false; }
+          else { txnId.classList.remove('error'); hideError('errTxnId'); }
+        }
+
+        if (!valid) {
+          showToast('Please complete the highlighted fields');
+          return;
+        }
+
+        const deliveryFee = DELIVERY_FEES[area.value] || 0;
+        const subtotal = getCartTotal();
+        const total = subtotal + deliveryFee;
+        const areaLabel = area.value === 'chittagong' ? 'Inside Chittagong' : 'Outside Chittagong';
+
+        /* Build Telegram message */
+        const itemLines = cart.map((item, i) =>
+          `${i + 1}. ${item.name} — Size ${item.size} × ${item.qty} = ${CURRENCY}${item.price * item.qty}`
+        ).join('\n');
+
+        const notesEl = document.getElementById('custNotes');
+        const notesLine = notesEl && notesEl.value.trim() ? `\n📝 Notes: ${notesEl.value.trim()}` : '';
+        const paymentLine = (method === 'bkash' || method === 'nagad')
+          ? `${PAYMENT_LABELS[method]} (Txn ID: ${txnId.value.trim()})`
+          : PAYMENT_LABELS[method];
+
+        const message =
+`🛍️ <b>NEW AMERO ORDER</b>
+
+👤 ${name.value.trim()}
+📞 ${cleanPhone}
+📍 ${address.value.trim()}
+🚚 ${areaLabel} (৳${deliveryFee})
+
+🛒 Items:
+${itemLines}
+
+💰 Subtotal: ${CURRENCY}${subtotal}
+💰 Total: ${CURRENCY}${total}
+💳 Payment: ${paymentLine}${notesLine}`;
+
+        sendTelegramNotification(message);
+
+        /* Show confirmation */
+        document.getElementById('confirmName').textContent = name.value.trim();
+        const detailEl = document.getElementById('confirmDetail');
+        if (method === 'cod') {
+          detailEl.innerHTML = `You'll pay <strong>Cash on Delivery</strong>. We'll call <strong>${cleanPhone}</strong> to confirm your order.`;
+        } else {
+          detailEl.innerHTML = `We've noted your <strong>${PAYMENT_LABELS[method]}</strong> payment (Txn ID: ${txnId.value.trim()}). We'll verify it and call <strong>${cleanPhone}</strong> shortly.`;
+        }
+
+        layout.style.display = 'none';
+        emptyEl.style.display = 'none';
+        document.getElementById('orderConfirmation').classList.add('visible');
+
+        clearCart();
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      });
+
+      renderSummary();
+    })();
+  </script>
+</body>
+</html>
