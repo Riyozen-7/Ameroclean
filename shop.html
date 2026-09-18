@@ -12,25 +12,8 @@
 </head>
 <body>
 
-  <!-- NAVBAR -->
-  <nav class="navbar" id="navbar">
-    <div class="navbar-inner">
-      <a href="index.html" class="nav-logo">Amero.</a>
-      <div class="nav-links" id="navLinks">
-        <a href="index.html" class="nav-link">Home</a>
-        <a href="shop.html" class="nav-link">Shop</a>
-        <a href="contact.html" class="nav-link">About</a>
-        <a href="cart.html" class="nav-cart">
-          <svg viewBox="0 0 24 24"><path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 01-8 0"/></svg>
-          <span>Cart</span>
-          <span class="cart-count" id="navCartCount">0</span>
-        </a>
-      </div>
-      <button class="menu-toggle" id="menuToggle" aria-label="Menu">
-        <span></span><span></span><span></span>
-      </button>
-    </div>
-  </nav>
+  <!-- NAVBAR (injected by js/layout.js) -->
+  <header id="site-nav"></header>
 
   <!-- PAGE HEADER -->
   <header class="page-section" style="padding-top: calc(var(--nav-height) + var(--sp-3xl)); padding-bottom: var(--sp-2xl);">
@@ -46,10 +29,10 @@
   <section class="page-section" style="padding-top: 0;">
     <div class="container">
       <div class="filter-bar reveal">
-        <div class="filter-chips" id="categoryFilter">
-          <button class="filter-chip active" data-category="all">All</button>
-          <button class="filter-chip" data-category="shirts">Shirts</button>
-          <button class="filter-chip" data-category="t-shirts">T-Shirts</button>
+        <div class="filter-chips" id="categoryFilter" role="group" aria-label="Filter by category">
+          <button class="filter-chip active" data-category="all" aria-pressed="true">All</button>
+          <button class="filter-chip" data-category="shirts" aria-pressed="false">Shirts</button>
+          <button class="filter-chip" data-category="t-shirts" aria-pressed="false">T-Shirts</button>
         </div>
         <div class="filter-group">
           <label for="sortSelect">Sort by</label>
@@ -68,25 +51,11 @@
     </div>
   </section>
 
-  <!-- FOOTER -->
-  <footer class="footer">
-    <div class="container">
-      <div class="footer-inner">
-        <div>
-          <div class="footer-brand">Amero.</div>
-          <div class="footer-tagline">Simple, clean, made to last.</div>
-        </div>
-        <div class="footer-links">
-          <a href="shop.html">Shop</a>
-          <a href="contact.html">Contact</a>
-          <a href="cart.html">Cart</a>
-        </div>
-      </div>
-      <div class="footer-copy">&copy; 2026 Amero. All rights reserved.</div>
-    </div>
-  </footer>
+  <!-- FOOTER (injected by js/layout.js) -->
+  <footer id="site-footer"></footer>
 
   <!-- SCRIPTS -->
+  <script src="js/layout.js"></script>
   <script src="js/app.js"></script>
   <script>
     /* SHOP PAGE — filter, sort, and render all products */
@@ -122,29 +91,20 @@
           return;
         }
 
-        grid.innerHTML = list.map(p => {
-          return `
-            <a href="product.html?id=${p.id}" class="product-card reveal" data-id="${p.id}">
-              <div class="product-img">
-                <img src="${p.img}" alt="${p.name}" loading="lazy">
-              </div>
-              <div class="product-info">
-                <h3 class="product-name">${p.name}</h3>
-                <span class="product-price">${CURRENCY}${p.price}</span>
-              </div>
-            </a>
-          `;
-        }).join('');
-
+        grid.innerHTML = list.map(p => productCardMarkup(p)).join('');
         initScrollReveal();
       }
 
-      /* Category filter chips */
+      /* Category filter chips (toggle aria-pressed for assistive tech) */
       document.getElementById('categoryFilter').addEventListener('click', (e) => {
         const chip = e.target.closest('.filter-chip');
         if (!chip) return;
-        document.querySelectorAll('#categoryFilter .filter-chip').forEach(c => c.classList.remove('active'));
+        document.querySelectorAll('#categoryFilter .filter-chip').forEach(c => {
+          c.classList.remove('active');
+          c.setAttribute('aria-pressed', 'false');
+        });
         chip.classList.add('active');
+        chip.setAttribute('aria-pressed', 'true');
         activeCategory = chip.dataset.category;
         render();
       });

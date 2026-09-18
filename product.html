@@ -12,30 +12,13 @@
 </head>
 <body>
 
-  <!-- NAVBAR -->
-  <nav class="navbar" id="navbar">
-    <div class="navbar-inner">
-      <a href="index.html" class="nav-logo">Amero.</a>
-      <div class="nav-links" id="navLinks">
-        <a href="index.html" class="nav-link">Home</a>
-        <a href="shop.html" class="nav-link">Shop</a>
-        <a href="contact.html" class="nav-link">About</a>
-        <a href="cart.html" class="nav-cart">
-          <svg viewBox="0 0 24 24"><path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 01-8 0"/></svg>
-          <span>Cart</span>
-          <span class="cart-count" id="navCartCount">0</span>
-        </a>
-      </div>
-      <button class="menu-toggle" id="menuToggle" aria-label="Menu">
-        <span></span><span></span><span></span>
-      </button>
-    </div>
-  </nav>
+  <!-- NAVBAR (injected by js/layout.js) -->
+  <header id="site-nav"></header>
 
   <!-- PRODUCT DETAIL -->
   <section class="product-page">
     <div class="container">
-      <nav class="breadcrumb" id="breadcrumb">
+      <nav class="breadcrumb" id="breadcrumb" aria-label="Breadcrumb">
         <a href="index.html">Home</a>
         <span class="breadcrumb-sep">&rsaquo;</span>
         <a href="shop.html">Shop</a>
@@ -44,7 +27,7 @@
       </nav>
 
       <div class="product-detail" id="productDetail">
-        <!-- Rendered by JS -->
+        <!-- Rendered once by JS; only the changing nodes are updated afterwards -->
       </div>
 
       <div style="text-align: center; margin-top: var(--sp-4xl);" class="reveal">
@@ -54,32 +37,20 @@
     </div>
   </section>
 
-  <!-- FOOTER -->
-  <footer class="footer">
-    <div class="container">
-      <div class="footer-inner">
-        <div>
-          <div class="footer-brand">Amero.</div>
-          <div class="footer-tagline">Simple, clean, made to last.</div>
-        </div>
-        <div class="footer-links">
-          <a href="shop.html">Shop</a>
-          <a href="contact.html">Contact</a>
-          <a href="cart.html">Cart</a>
-        </div>
-      </div>
-      <div class="footer-copy">&copy; 2026 Amero. All rights reserved.</div>
-    </div>
-  </footer>
+  <!-- FOOTER (injected by js/layout.js) -->
+  <footer id="site-footer"></footer>
 
   <!-- SCRIPTS -->
+  <script src="js/layout.js"></script>
   <script src="js/app.js"></script>
   <script>
-    /* PRODUCT PAGE — render detail from ?id= query param */
+    /* PRODUCT PAGE — render detail from ?id= query param.
+       Builds the DOM once and updates only the nodes that change (gallery,
+       size chips, quantity, button), avoiding destructive re-renders. */
     (function () {
       const params = new URLSearchParams(window.location.search);
-      const productId = parseInt(params.get('id'));
-      const product = products.find(p => p.id === productId);
+      const productId = parseInt(params.get('id'), 10);
+      const product = findProduct(productId);
 
       const container = document.getElementById('productDetail');
       if (!product) {
@@ -96,126 +67,183 @@
       let qty = 1;
       let galleryActive = 0;
 
-      function render() {
+      /* Static skeleton — constructed once, then targeted updates below. */
+      container.innerHTML = `
+        <div class="product-gallery reveal in-view">
+          <div class="gallery-main" id="galleryMain" role="button" tabindex="0" aria-label="Open image gallery">
+            <img id="galleryMainImg" alt="">
+          </div>
+          <div class="gallery-thumbs" id="galleryThumbs"></div>
+        </div>
+
+        <div class="product-detail-info reveal in-view">
+          <div class="stock-badge" style="margin-bottom: var(--sp-sm);">Only 1 piece per size</div>
+          <h1 class="product-name" id="productName"></h1>
+          <div class="product-price" id="productPrice"></div>
+          <p class="product-desc" id="productDesc"></p>
+
+          <div class="detail-section">
+            <span class="detail-label" id="sizeLabel">Size</span>
+            <div class="size-chips" id="sizeChips" role="group" aria-label="Select a size"></div>
+          </div>
+
+          <div class="detail-section">
+            <span class="detail-label">Quantity</span>
+            <div class="qty-selector">
+              <button class="qty-btn" id="qtyMinus" aria-label="Decrease quantity">&minus;</button>
+              <span class="qty-value" id="qtyValue" aria-live="polite">1</span>
+              <button class="qty-btn" id="qtyPlus" aria-label="Increase quantity">+</button>
+            </div>
+          </div>
+
+          <button class="btn btn-primary" id="addToCartBtn">Add to Cart</button>
+          <p class="size-guide-note"><a href="policies.html#size-guide">Size guide &amp; measurements &rarr;</a></p>
+
+          <div class="fabric-details">
+            <h4>Quality &amp; Details</h4>
+            <ul>
+              <li id="fabricLine"></li>
+              <li id="qualityLine"></li>
+              <li>Hand-checked before shipping</li>
+              <li>1 piece per size per run</li>
+            </ul>
+          </div>
+        </div>
+      `;
+
+      const mainImg = document.getElementById('galleryMainImg');
+      const galleryMain = document.getElementById('galleryMain');
+      const galleryThumbs = document.getElementById('galleryThumbs');
+      const sizeChips = document.getElementById('sizeChips');
+      const qtyValue = document.getElementById('qtyValue');
+      const qtyMinus = document.getElementById('qtyMinus');
+      const qtyPlus = document.getElementById('qtyPlus');
+      const addBtn = document.getElementById('addToCartBtn');
+
+      document.getElementById('productName').textContent = product.name;
+      document.getElementById('productPrice').textContent = CURRENCY + product.price;
+      document.getElementById('productDesc').textContent = product.desc;
+      document.getElementById('fabricLine').textContent = product.fabric;
+      document.getElementById('qualityLine').textContent = 'Quality: ' + product.quality;
+
+      /* ---------- Gallery (incremental) ---------- */
+      function renderGallery() {
+        mainImg.src = product.images[galleryActive];
+        mainImg.srcset = imgSrcset(product.images[galleryActive]);
+        mainImg.sizes = '(max-width: 968px) 100vw, 45vw';
+        mainImg.alt = product.name;
+
+        galleryThumbs.innerHTML = product.images.map((src, i) => `
+          <button class="gallery-thumb${i === galleryActive ? ' active' : ''}" data-index="${i}"
+                  aria-label="View image ${i + 1} of ${product.images.length}" aria-pressed="${i === galleryActive}">
+            <img ${imgAttr(src, product.name + ' thumbnail', '72px')}>
+          </button>
+        `).join('');
+      }
+
+      galleryMain.addEventListener('click', () => openGallery(product.id));
+      galleryMain.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          openGallery(product.id);
+        }
+      });
+      galleryThumbs.addEventListener('click', (e) => {
+        const thumb = e.target.closest('.gallery-thumb');
+        if (!thumb) return;
+        galleryActive = parseInt(thumb.dataset.index, 10);
+        renderGallery();
+      });
+
+      /* ---------- Size chips (incremental) ---------- */
+      function renderSizes() {
         if (!selectedSize) {
           const firstAvail = product.sizes.find(s => stockRemaining(product.id, s.size) > 0);
           selectedSize = firstAvail ? firstAvail.size : product.sizes[0].size;
         }
-        const stockLeft = stockRemaining(product.id, selectedSize);
-        qty = Math.max(1, Math.min(qty, Math.max(1, stockLeft)));
-
-        const chips = product.sizes.map(s => {
+        sizeChips.innerHTML = product.sizes.map(s => {
           const rem = stockRemaining(product.id, s.size);
-          return `<button class="size-chip${s.size === selectedSize ? ' selected' : ''}" data-size="${s.size}" ${rem <= 0 ? 'disabled' : ''}>${s.size}${rem <= 0 ? ' · Out' : ''}</button>`;
+          const out = rem <= 0;
+          return `<button class="size-chip${s.size === selectedSize ? ' selected' : ''}${out ? ' sold-out' : ''}"
+                          data-size="${escapeHtml(s.size)}" ${out ? 'disabled' : ''}
+                          aria-pressed="${s.size === selectedSize}">${escapeHtml(s.size)}${out ? ' · Out' : ''}</button>`;
         }).join('');
-
-        container.innerHTML = `
-          <div class="product-gallery reveal in-view">
-            <div class="gallery-main" onclick="openGallery(${product.id})">
-              <img src="${product.images[galleryActive]}" alt="${product.name}">
-            </div>
-            <div class="gallery-thumbs">
-              ${product.images.map((src, i) => `
-                <button class="gallery-thumb${i === galleryActive ? ' active' : ''}" onclick="setGalleryImage(${i})">
-                  <img src="${src}" alt="">
-                </button>
-              `).join('')}
-            </div>
-          </div>
-
-          <div class="product-detail-info reveal in-view">
-            <div class="stock-badge" style="margin-bottom: var(--sp-sm);">Only 1 piece per size</div>
-            <h1 class="product-name">${product.name}</h1>
-            <div class="product-price">${CURRENCY}${product.price}</div>
-            <p class="product-desc">${product.desc}</p>
-
-            <div class="detail-section">
-              <span class="detail-label">Size</span>
-              <div class="size-chips" id="sizeChips">
-                ${chips}
-              </div>
-            </div>
-
-            <div class="detail-section">
-              <span class="detail-label">Quantity</span>
-              <div class="qty-selector">
-                <button class="qty-btn" onclick="changeQtySelector(-1)" aria-label="Decrease">&minus;</button>
-                <span class="qty-value" id="qtyValue">${qty}</span>
-                <button class="qty-btn" onclick="changeQtySelector(1)" aria-label="Increase">+</button>
-              </div>
-            </div>
-
-            <button class="btn btn-primary" id="addToCartBtn" ${stockLeft <= 0 ? 'disabled' : ''}>
-              ${stockLeft > 0 ? 'Add to Cart' : 'Sold Out'}
-            </button>
-
-            <div class="fabric-details">
-              <h4>Quality &amp; Details</h4>
-              <ul>
-                <li>${product.fabric}</li>
-                <li>Quality: ${product.quality}</li>
-                <li>Hand-checked before shipping</li>
-                <li>1 piece per size per run</li>
-              </ul>
-            </div>
-          </div>
-        `;
-
-        /* Size chip events (inline handlers don't clash with re-renders) */
-        document.getElementById('sizeChips').addEventListener('click', (e) => {
-          const chip = e.target.closest('.size-chip');
-          if (!chip || chip.disabled) return;
-          selectedSize = chip.dataset.size;
-          render();
-        });
-
-        document.getElementById('addToCartBtn').addEventListener('click', () => {
-          if (addToCart(product.id, selectedSize, qty)) {
-            const btn = document.getElementById('addToCartBtn');
-            btn.classList.add('added');
-            btn.textContent = 'Added to Cart';
-            setTimeout(() => {
-              btn.classList.remove('added');
-              btn.textContent = 'Add to Cart';
-            }, 1200);
-            showToast('Added to cart');
-          }
-        });
       }
 
-      /* Gallery thumbnail switching */
-      window.setGalleryImage = function (i) {
-        galleryActive = i;
-        render();
-      };
+      sizeChips.addEventListener('click', (e) => {
+        const chip = e.target.closest('.size-chip');
+        if (!chip || chip.disabled || chip.classList.contains('selected')) return;
+        selectedSize = chip.dataset.size;
+        qty = 1;
+        renderSizes();
+        syncState();
+      });
 
-      window.changeQtySelector = function (delta) {
-        const max = stockRemaining(product.id, selectedSize);
-        qty = Math.max(1, Math.min(qty + delta, Math.max(1, max)));
-        document.getElementById('qtyValue').textContent = qty;
-      };
+      /* ---------- Quantity + Add-to-cart state (fixes stale stock/button) ---------- */
+      function syncState() {
+        const stockLeft = stockRemaining(product.id, selectedSize);
 
-      render();
+        if (stockLeft <= 0) {
+          qty = 0;
+          qtyValue.textContent = 0;
+          qtyMinus.disabled = true;
+          qtyPlus.disabled = true;
+          addBtn.disabled = true;
+          addBtn.textContent = 'Sold Out';
+          return;
+        }
+
+        if (!Number.isInteger(qty) || qty < 1) qty = 1;
+        if (qty > stockLeft) qty = stockLeft;
+
+        qtyValue.textContent = qty;
+        qtyMinus.disabled = qty <= 1;
+        qtyPlus.disabled = qty >= stockLeft;
+        addBtn.disabled = false;
+        addBtn.textContent = 'Add to Cart';
+      }
+
+      qtyMinus.addEventListener('click', () => { qty -= 1; syncState(); });
+      qtyPlus.addEventListener('click', () => { qty += 1; syncState(); });
+
+      addBtn.addEventListener('click', () => {
+        const stockLeft = stockRemaining(product.id, selectedSize);
+        if (stockLeft <= 0 || qty < 1) return;
+
+        if (addToCart(product.id, selectedSize, qty)) {
+          showToast('Added to cart');
+          addBtn.textContent = 'Added to Cart';
+          addBtn.classList.add('added');
+          setTimeout(() => {
+            addBtn.classList.remove('added');
+            // Show the true post-add state: stock may now be exhausted.
+            syncState();
+          }, 700);
+          syncState();
+        } else {
+          showToast('This piece is no longer available');
+          syncState();
+        }
+      });
+
+      /* Re-evaluate stock/qty when the cart changes elsewhere (other tabs). */
+      onCartChange(() => {
+        renderSizes();
+        syncState();
+      });
+
+      /* ---------- Init ---------- */
+      renderGallery();
+      renderSizes();
+      syncState();
       initScrollReveal();
 
-      /* Related products: same category, excluding current */
+      /* ---------- Related products ---------- */
       const related = products.filter(p => p.category === product.category && p.id !== product.id).slice(0, 3);
       const relatedGrid = document.getElementById('relatedGrid');
 
       if (related.length) {
-        relatedGrid.innerHTML = related.map(p => {
-          return `
-            <a href="product.html?id=${p.id}" class="product-card reveal" data-id="${p.id}">
-              <div class="product-img">
-                <img src="${p.img}" alt="${p.name}" loading="lazy">
-              </div>
-              <div class="product-info">
-                <h3 class="product-name">${p.name}</h3>
-                <span class="product-price">${CURRENCY}${p.price}</span>
-              </div>
-            </a>
-          `;
-        }).join('');
+        relatedGrid.innerHTML = related.map(p => productCardMarkup(p)).join('');
       } else {
         relatedGrid.innerHTML = '<div class="empty-state"><p>More pieces coming soon.</p></div>';
       }

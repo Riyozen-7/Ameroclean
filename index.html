@@ -9,28 +9,14 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;1,300;1,400&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/style.css">
+  <!-- Preload the hero image only on wide screens; on mobile it is a low-opacity
+       background and must not compete with above-the-fold content. -->
+  <link rel="preload" as="image" href="images/product-2/front-640.webp" media="(min-width: 641px)" imagesrcset="images/product-2/front-640.webp 640w, images/product-2/front.webp 1200w" imagesizes="55vw">
 </head>
 <body>
 
-  <!-- NAVBAR -->
-  <nav class="navbar" id="navbar">
-    <div class="navbar-inner">
-      <a href="index.html" class="nav-logo">Amero.</a>
-      <div class="nav-links" id="navLinks">
-        <a href="index.html" class="nav-link">Home</a>
-        <a href="shop.html" class="nav-link">Shop</a>
-        <a href="contact.html" class="nav-link">About</a>
-        <a href="cart.html" class="nav-cart">
-          <svg viewBox="0 0 24 24"><path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 01-8 0"/></svg>
-          <span>Cart</span>
-          <span class="cart-count" id="navCartCount">0</span>
-        </a>
-      </div>
-      <button class="menu-toggle" id="menuToggle" aria-label="Menu">
-        <span></span><span></span><span></span>
-      </button>
-    </div>
-  </nav>
+  <!-- NAVBAR (injected by js/layout.js) -->
+  <header id="site-nav"></header>
 
   <!-- HERO -->
   <section class="hero">
@@ -40,7 +26,7 @@
       <p class="hero-desc">Small-batch essentials crafted in Chattogram. Premium fabrics, honest sizing, and quality you can feel.</p>
       <a href="shop.html" class="btn btn-primary">Shop the Collection</a>
     </div>
-    <img class="hero-image" src="images/product-2/front.jpg.jpeg" alt="Amero premium t-shirt" loading="eager">
+    <img class="hero-image" src="images/product-2/front.jpg" srcset="images/product-2/front-640.webp 640w, images/product-2/front.webp 1200w" sizes="55vw" width="1086" height="1448" alt="Amero premium t-shirt" loading="lazy" decoding="async">
   </section>
 
   <!-- BRAND QUOTE -->
@@ -63,25 +49,11 @@
     </div>
   </section>
 
-  <!-- FOOTER -->
-  <footer class="footer">
-    <div class="container">
-      <div class="footer-inner">
-        <div>
-          <div class="footer-brand">Amero.</div>
-          <div class="footer-tagline">Simple, clean, made to last.</div>
-        </div>
-        <div class="footer-links">
-          <a href="shop.html">Shop</a>
-          <a href="contact.html">Contact</a>
-          <a href="cart.html">Cart</a>
-        </div>
-      </div>
-      <div class="footer-copy">&copy; 2026 Amero. All rights reserved.</div>
-    </div>
-  </footer>
+  <!-- FOOTER (injected by js/layout.js) -->
+  <footer id="site-footer"></footer>
 
   <!-- SCRIPTS -->
+  <script src="js/layout.js"></script>
   <script src="js/app.js"></script>
   <script>
     /* Render the first 4 products as "featured" on the home page */
@@ -90,21 +62,7 @@
       if (!grid) return;
 
       const featured = products.slice(0, 4);
-
-      grid.innerHTML = featured.map(p => {
-        return `
-          <a href="product.html?id=${p.id}" class="product-card reveal" data-id="${p.id}">
-            <div class="product-img">
-              <img src="${p.img}" alt="${p.name}" loading="lazy">
-            </div>
-            <div class="product-info">
-              <h3 class="product-name">${p.name}</h3>
-              <span class="product-price">${CURRENCY}${p.price}</span>
-            </div>
-          </a>
-        `;
-      }).join('');
-
+      grid.innerHTML = featured.map(p => productCardMarkup(p)).join('');
       initScrollReveal();
     })();
   </script>

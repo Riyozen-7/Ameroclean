@@ -12,25 +12,8 @@
 </head>
 <body>
 
-  <!-- NAVBAR -->
-  <nav class="navbar" id="navbar">
-    <div class="navbar-inner">
-      <a href="index.html" class="nav-logo">Amero.</a>
-      <div class="nav-links" id="navLinks">
-        <a href="index.html" class="nav-link">Home</a>
-        <a href="shop.html" class="nav-link">Shop</a>
-        <a href="contact.html" class="nav-link">About</a>
-        <a href="cart.html" class="nav-cart">
-          <svg viewBox="0 0 24 24"><path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 01-8 0"/></svg>
-          <span>Cart</span>
-          <span class="cart-count" id="navCartCount">0</span>
-        </a>
-      </div>
-      <button class="menu-toggle" id="menuToggle" aria-label="Menu">
-        <span></span><span></span><span></span>
-      </button>
-    </div>
-  </nav>
+  <!-- NAVBAR (injected by js/layout.js) -->
+  <header id="site-nav"></header>
 
   <!-- CHECKOUT -->
   <section class="checkout-page">
@@ -41,7 +24,7 @@
 
       <!-- Empty cart guard -->
       <div class="cart-empty" id="checkoutEmpty" style="display:none;">
-        <svg viewBox="0 0 24 24"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 002 1.61h9.72a2 2 0 002-1.61L23 6H6"/></svg>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 002 1.61h9.72a2 2 0 002-1.61L23 6H6"/></svg>
         <p>Your cart is empty. Add something first.</p>
         <a href="shop.html" class="btn btn-primary">Browse Products</a>
       </div>
@@ -60,7 +43,7 @@
           <div class="form-group">
             <label for="custPhone">Phone Number</label>
             <input type="tel" id="custPhone" name="phone" placeholder="01XXXXXXXXX" autocomplete="tel">
-            <span class="error-msg" id="errPhone">Enter a valid Bangladeshi number (01XXXXXXXXX).</span>
+            <span class="error-msg" id="errPhone">Enter a valid Bangladeshi number (e.g. 01XXXXXXXXX, +8801XXXXXXXXX, or 01880-471287).</span>
           </div>
 
           <div class="form-group">
@@ -107,11 +90,17 @@
 
           <div class="form-group txn-id-group" id="txnGroup">
             <label for="txnId">Transaction ID</label>
-            <input type="text" id="txnId" name="txnId" placeholder="Enter your Transaction ID">
+            <input type="text" id="txnId" name="txnId" placeholder="Enter your Transaction ID" autocomplete="off">
             <span class="error-msg" id="errTxnId">Please enter the Transaction ID.</span>
           </div>
 
           <button type="submit" class="btn btn-primary" id="placeOrderBtn" style="margin-top: var(--sp-md);">Place Order</button>
+
+          <!-- Order-failure fallback (never silently lose an order) -->
+          <div class="order-error" id="orderError" style="display:none;">
+            <p id="orderErrorText"></p>
+            <a class="btn btn-whatsapp" id="whatsappErrorBtn" href="#" target="_blank" rel="noopener" >Order via WhatsApp instead</a>
+          </div>
         </form>
 
         <!-- Order summary -->
@@ -137,58 +126,63 @@
       <!-- Order confirmation -->
       <div class="order-confirmation" id="orderConfirmation">
         <div class="confirm-icon">
-          <svg viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6L9 17l-5-5"/></svg>
         </div>
         <h2>Thank you, <span id="confirmName"></span>!</h2>
         <p>Your order has been placed.</p>
         <p class="confirm-detail" id="confirmDetail"></p>
+        <div class="notify-fallback" id="notifyFallback" style="display:none;">
+          <p>Your order is safely recorded, but our notification service didn&rsquo;t respond. Please forward your order to us on WhatsApp so we can start packing it right away.</p>
+          <a class="btn btn-whatsapp" id="whatsappConfirmBtn" href="#" target="_blank" rel="noopener">Send order details via WhatsApp</a>
+        </div>
         <a href="shop.html" class="btn btn-outline">Continue Shopping</a>
       </div>
     </div>
   </section>
 
-  <!-- FOOTER -->
-  <footer class="footer">
-    <div class="container">
-      <div class="footer-inner">
-        <div>
-          <div class="footer-brand">Amero.</div>
-          <div class="footer-tagline">Simple, clean, made to last.</div>
-        </div>
-        <div class="footer-links">
-          <a href="shop.html">Shop</a>
-          <a href="contact.html">Contact</a>
-          <a href="cart.html">Cart</a>
-        </div>
-      </div>
-      <div class="footer-copy">&copy; 2026 Amero. All rights reserved.</div>
-    </div>
-  </footer>
+  <!-- FOOTER (injected by js/layout.js) -->
+  <footer id="site-footer"></footer>
 
   <!-- SCRIPTS -->
+  <script src="js/layout.js"></script>
+  <script src="js/config.js"></script>
   <script src="js/app.js"></script>
   <script>
-    /* CHECKOUT PAGE — validation, payment instructions, order placement */
+    /* CHECKOUT PAGE — validation, payment instructions, order placement.
+       Order totals and stock are re-validated by the order API (Cloudflare
+       Worker in production, server/server.js in local dev); prices, delivery
+       fees, and payment are never trusted from the browser. If the
+       notification step fails the order is neither lost nor silently
+       dropped — the customer gets a WhatsApp fallback. */
     (function () {
+      const ORDER_API_ENDPOINT = (typeof ORDER_API_URL !== 'undefined' && ORDER_API_URL ? ORDER_API_URL : '') + '/api/order';
       const layout = document.getElementById('checkoutLayout');
       const emptyEl = document.getElementById('checkoutEmpty');
       const form = document.getElementById('checkoutForm');
       const summaryItems = document.getElementById('summaryItems');
+      const placeOrderBtn = document.getElementById('placeOrderBtn');
+      const orderError = document.getElementById('orderError');
+      const orderErrorText = document.getElementById('orderErrorText');
 
       /* Guard: if cart empty, show empty message, hide form */
       if (cart.length === 0) {
         emptyEl.style.display = 'block';
         layout.style.display = 'none';
-        document.getElementById('placeOrderBtn').disabled = true;
+        placeOrderBtn.disabled = true;
       }
 
       function formatMoney(n) {
         return CURRENCY + n.toFixed(0);
       }
 
+      function currentDeliveryFee() {
+        const area = document.getElementById('deliveryArea').value;
+        return area === 'chittagong' ? DELIVERY_FEES.chittagong : (area === 'outside' ? DELIVERY_FEES.outside : 0);
+      }
+
       function renderSummary() {
         const subtotal = getCartTotal();
-        const delivery = parseInt(document.getElementById('deliveryArea').value === 'chittagong' ? DELIVERY_FEES.chittagong : (document.getElementById('deliveryArea').value === 'outside' ? DELIVERY_FEES.outside : 0));
+        const delivery = currentDeliveryFee();
         const total = subtotal + delivery;
 
         document.getElementById('sumSubtotal').textContent = formatMoney(subtotal);
@@ -201,10 +195,10 @@
         }
         summaryItems.innerHTML = cart.map(item => `
           <div class="order-item">
-            <div class="order-item-img"><img src="${item.img}" alt="${item.name}"></div>
+            <div class="order-item-img"><img ${imgAttr(item.img, item.name, '50px')}></div>
             <div class="order-item-info">
-              <div class="order-item-name">${item.name}</div>
-              <div class="order-item-meta">Size ${item.size} · Qty ${item.qty}</div>
+              <div class="order-item-name">${escapeHtml(item.name)}</div>
+              <div class="order-item-meta">Size ${escapeHtml(item.size)} · Qty ${item.qty}</div>
             </div>
             <div class="order-item-price">${formatMoney(item.price * item.qty)}</div>
           </div>
@@ -213,6 +207,7 @@
 
       /* Delivery area -> update summary */
       document.getElementById('deliveryArea').addEventListener('change', renderSummary);
+      onCartChange(renderSummary);
 
       /* Payment method -> show instructions + txn field for bKash/Nagad */
       const paymentInstructions = document.getElementById('paymentInstructions');
@@ -223,7 +218,7 @@
         radio.addEventListener('change', () => {
           const method = document.querySelector('input[name="paymentMethod"]:checked').value;
           if (method === 'bkash' || method === 'nagad') {
-            paymentInstructionsText.innerHTML = `Send the total amount to <strong>${PAYMENT_NUMBER}</strong> (${PAYMENT_LABELS[method]} — Send Money), then enter the Transaction ID below.`;
+            paymentInstructionsText.innerHTML = `Send the total amount to <strong>${escapeHtml(PAYMENT_NUMBER)}</strong> (${escapeHtml(PAYMENT_LABELS[method])} — Send Money), then enter the Transaction ID below.`;
             paymentInstructions.classList.add('visible');
             txnGroup.classList.add('visible');
           } else {
@@ -233,6 +228,38 @@
         });
       });
 
+      /* ---------- WhatsApp fallback ---------- */
+      function buildWhatsAppUrl(extraTotals) {
+        const name = document.getElementById('custName').value.trim();
+        const cleanPhone = normalizePhone(document.getElementById('custPhone').value) || '';
+        const address = document.getElementById('custAddress').value.trim();
+        const notes = document.getElementById('custNotes').value.trim();
+        const area = document.getElementById('deliveryArea').value;
+        const subtotal = getCartTotal();
+        const delivery = area === 'chittagong' ? DELIVERY_FEES.chittagong : (area === 'outside' ? DELIVERY_FEES.outside : 0);
+        const total = subtotal + delivery;
+
+        return whatsappOrderUrl(buildOrderText(cart, {
+          name,
+          phone: cleanPhone,
+          address,
+          notes,
+          total: (extraTotals && extraTotals.total) || total
+        }));
+      }
+
+      function showOrderFailure(message) {
+        orderErrorText.textContent = message;
+        orderError.style.display = 'block';
+        document.getElementById('whatsappErrorBtn').href = buildWhatsAppUrl();
+        showToast('Could not place the order — please try WhatsApp');
+      }
+
+      function hideOrderFailure() {
+        orderError.style.display = 'none';
+      }
+
+      /* ---------- Validation ---------- */
       function showError(id) {
         document.getElementById(id).classList.add('visible');
       }
@@ -240,9 +267,10 @@
         document.getElementById(id).classList.remove('visible');
       }
 
-      form.addEventListener('submit', function (e) {
+      form.addEventListener('submit', async function (e) {
         e.preventDefault();
         updateNavCartCount();
+        hideOrderFailure();
 
         if (cart.length === 0) {
           showToast('Your cart is empty');
@@ -262,9 +290,9 @@
         if (!name.value.trim()) { name.classList.add('error'); showError('errName'); valid = false; }
         else { name.classList.remove('error'); hideError('errName'); }
 
-        /* Phone */
-        const cleanPhone = phone.value.trim().replace(/\s+/g, '');
-        if (!/^01[3-9]\d{8}$/.test(cleanPhone)) { phone.classList.add('error'); showError('errPhone'); valid = false; }
+        /* Phone — accepts 01XXXXXXXXX, +8801XXXXXXXXX, dashes and spaces */
+        const cleanPhone = normalizePhone(phone.value);
+        if (!cleanPhone) { phone.classList.add('error'); showError('errPhone'); valid = false; }
         else { phone.classList.remove('error'); hideError('errPhone'); }
 
         /* Address */
@@ -286,46 +314,80 @@
           return;
         }
 
-        const deliveryFee = DELIVERY_FEES[area.value] || 0;
-        const subtotal = getCartTotal();
-        const total = subtotal + deliveryFee;
-        const areaLabel = area.value === 'chittagong' ? 'Inside Chittagong' : 'Outside Chittagong';
-
-        /* Build Telegram message */
-        const itemLines = cart.map((item, i) =>
-          `${i + 1}. ${item.name} — Size ${item.size} × ${item.qty} = ${CURRENCY}${item.price * item.qty}`
-        ).join('\n');
-
         const notesEl = document.getElementById('custNotes');
-        const notesLine = notesEl && notesEl.value.trim() ? `\n📝 Notes: ${notesEl.value.trim()}` : '';
-        const paymentLine = (method === 'bkash' || method === 'nagad')
-          ? `${PAYMENT_LABELS[method]} (Txn ID: ${txnId.value.trim()})`
-          : PAYMENT_LABELS[method];
+        const customer = {
+          name: name.value.trim(),
+          phone: cleanPhone,
+          address: address.value.trim(),
+          area: area.value,
+          notes: notesEl.value.trim()
+        };
+        const payload = {
+          customer,
+          payment: {
+            method: method,
+            txnId: (method === 'bkash' || method === 'nagad') ? txnId.value.trim() : ''
+          },
+          items: cart.map(item => ({ id: item.id, size: item.size, qty: item.qty }))
+        };
 
-        const message =
-`🛍️ <b>NEW AMERO ORDER</b>
+        placeOrderBtn.disabled = true;
+        placeOrderBtn.textContent = 'Placing order…';
 
-👤 ${name.value.trim()}
-📞 ${cleanPhone}
-📍 ${address.value.trim()}
-🚚 ${areaLabel} (৳${deliveryFee})
+        let responseData = null;
+        try {
+          const res = await fetch(ORDER_API_ENDPOINT, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          });
+          responseData = await res.json();
 
-🛒 Items:
-${itemLines}
+          if (!res.ok || !responseData.ok) {
+            // Server rejected (validation, stock) — keep the cart and offer WhatsApp.
+            placeOrderBtn.disabled = false;
+            placeOrderBtn.textContent = 'Place Order';
+            showOrderFailure(responseData.error || 'Your order could not be placed.');
+            if (responseData.unavailable) {
+              responseData.unavailable.forEach(u => {
+                removeFromCart(u.id, u.size);
+              });
+            }
+            return;
+          }
+        } catch (err) {
+          // Network failure — keep the cart, never lose the order.
+          placeOrderBtn.disabled = false;
+          placeOrderBtn.textContent = 'Place Order';
+          showOrderFailure('We could not reach our order service. Your cart is saved — please order via WhatsApp below.');
+          return;
+        }
 
-💰 Subtotal: ${CURRENCY}${subtotal}
-💰 Total: ${CURRENCY}${total}
-💳 Payment: ${paymentLine}${notesLine}`;
-
-        sendTelegramNotification(message);
-
-        /* Show confirmation */
-        document.getElementById('confirmName').textContent = name.value.trim();
+        /* ---------- Success (order recorded server-side) ---------- */
+        document.getElementById('confirmName').textContent = customer.name;
         const detailEl = document.getElementById('confirmDetail');
+        const orderIdText = 'Order ' + responseData.orderId;
+
         if (method === 'cod') {
-          detailEl.innerHTML = `You'll pay <strong>Cash on Delivery</strong>. We'll call <strong>${cleanPhone}</strong> to confirm your order.`;
+          detailEl.innerHTML = `${escapeHtml(orderIdText)} &middot; You'll pay <strong>Cash on Delivery</strong>. We'll call <strong>${escapeHtml(cleanPhone)}</strong> to confirm your order.`;
         } else {
-          detailEl.innerHTML = `We've noted your <strong>${PAYMENT_LABELS[method]}</strong> payment (Txn ID: ${txnId.value.trim()}). We'll verify it and call <strong>${cleanPhone}</strong> shortly.`;
+          detailEl.innerHTML = `${escapeHtml(orderIdText)} &middot; We've noted your <strong>${escapeHtml(PAYMENT_LABELS[method])}</strong> payment (Txn ID: ${escapeHtml(txnId.value.trim())}). We'll verify it and call <strong>${escapeHtml(cleanPhone)}</strong> shortly.`;
+        }
+
+        /* If the notification failed, surface a WhatsApp fallback. */
+        const notifyFallback = document.getElementById('notifyFallback');
+        if (responseData.notified) {
+          notifyFallback.style.display = 'none';
+        } else {
+          showToast('Order recorded — please confirm via WhatsApp');
+          notifyFallback.style.display = 'block';
+          document.getElementById('whatsappConfirmBtn').href = whatsappOrderUrl(buildOrderText(cart, {
+            name: customer.name,
+            phone: customer.phone,
+            address: customer.address,
+            notes: customer.notes,
+            total: responseData.total
+          }));
         }
 
         layout.style.display = 'none';
