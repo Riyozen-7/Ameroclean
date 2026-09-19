@@ -57,6 +57,7 @@
 
   <!-- SCRIPTS -->
   <script src="js/layout.js"></script>
+  <script src="js/config.js"></script>
   <script src="js/app.js"></script>
   <script>
     /* CART PAGE — render items, quantity editing, totals */
@@ -127,6 +128,9 @@
 
       /* Re-render when the cart changes from anywhere (this tab or another) */
       onCartChange(render);
+
+      /* Re-render when live stock arrives so the "+" cap reflects the server. */
+      onStockChange(render);
 
       render();
     })();

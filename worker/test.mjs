@@ -1,5 +1,5 @@
 /* Smoke-test the Worker's pure order logic in Node before deploying. */
-import { normalizePhone, validatePayload, applyReservation, defaultStock, buildOrderMessage, PAYMENT_LABELS } from './worker.mjs';
+import { normalizePhone, validatePayload, applyReservation, defaultStock, buildOrderMessage, PAYMENT_LABELS, isAllowedOrigin } from './worker.mjs';
 
 let failures = 0;
 function check(label, cond) {
@@ -25,6 +25,7 @@ check('validatePayload rejects missing txn', !!validatePayload({ customer: valid
 check('validatePayload rejects empty cart', !!validatePayload({ customer: validPayload().customer, payment: { method: 'cod' }, items: [] }).error);
 
 const stock = defaultStock();
+check('defaultStock mirrors catalog (12 size keys)', Object.keys(stock).length === 12 && stock['1:L/XXL'] === 1 && stock['6:L'] === 1);
 const r1 = applyReservation(stock, v);
 check('applyReservation reserves both lines', r1.ok && r1.stock['2:M'] === 0 && r1.stock['3:L'] === 0);
 check('applyReservation totals', r1.ok && r1.order.subtotal === 900 && r1.order.delivery === 70 && r1.order.total === 970);
@@ -37,6 +38,17 @@ const msg = buildOrderMessage(r1.order, PAYMENT_LABELS.bkash);
 check('message is plain text (no HTML tags injected)', msg.includes('<b>after 5pm</b>'));
 check('message contains order id', msg.includes('AMR-'));
 check('message contains payment label', msg.includes('bKash (Txn ID: TRX123XYZ)'));
+
+// Origin allowlist (CORS guard)
+check('origin: localhost allowed', isAllowedOrigin('http://localhost:3000', {}) === true);
+check('origin: 127.0.0.1 allowed', isAllowedOrigin('http://127.0.0.1:8080', {}) === true);
+check('origin: github.io allowed', isAllowedOrigin('https://someone.github.io', {}) === true);
+check('origin: pages.dev allowed', isAllowedOrigin('https://amero.pages.dev', {}) === true);
+check('origin: custom domain allowed when listed', isAllowedOrigin('https://amero.com', { ALLOWED_ORIGINS: 'https://amero.com, https://www.amero.com' }) === true);
+check('origin: custom domain with trailing slash matches', isAllowedOrigin('https://amero.com/', { ALLOWED_ORIGINS: 'https://amero.com' }) === true);
+check('origin: unknown domain rejected', isAllowedOrigin('https://evil.example', {}) === false);
+check('origin: non-http scheme rejected', isAllowedOrigin('ftp://amero.com', {}) === false);
+check('origin: empty rejected', isAllowedOrigin('', {}) === false);
 
 console.log(failures ? `\n${failures} FAILURE(S)` : '\nALL PASS');
 process.exit(failures ? 1 : 0);

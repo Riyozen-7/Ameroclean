@@ -54,6 +54,7 @@
 
   <!-- SCRIPTS -->
   <script src="js/layout.js"></script>
+  <script src="js/config.js"></script>
   <script src="js/app.js"></script>
   <script>
     /* Render the first 4 products as "featured" on the home page */
@@ -62,8 +63,14 @@
       if (!grid) return;
 
       const featured = products.slice(0, 4);
-      grid.innerHTML = featured.map(p => productCardMarkup(p)).join('');
-      initScrollReveal();
+
+      function render() {
+        grid.innerHTML = featured.map(p => productCardMarkup(p)).join('');
+        initScrollReveal();
+      }
+
+      render();
+      onStockChange(render);
     })();
   </script>
 </body>

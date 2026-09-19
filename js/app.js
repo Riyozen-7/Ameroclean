@@ -218,6 +218,75 @@ function stockRemaining(productId, size) {
   return sizeInfo.stock - inCart;
 }
 
+// Raw (server) stock decides the "sold out" label; the viewer's own cart is
+// intentionally ignored there so a full cart doesn't hide the real status.
+function isProductSoldOut(product) {
+  return product.sizes.length > 0 && product.sizes.every(s => s.stock <= 0);
+}
+
+// ---------- LIVE STOCK (source of truth: the order API) ----------
+// The bundled product list ships with a "starting" stock so the site renders
+// instantly, but it is never authoritative: once an order is placed the only
+// accurate count lives on the server (Durable Object / stock.json). We fetch
+// that snapshot on load and overwrite the local copy so no visitor is shown a
+// piece that has already sold. If the API is unreachable we degrade gracefully
+// to the bundled values (checkout still re-validates server-side).
+function orderApiBase() {
+  return (typeof ORDER_API_URL !== 'undefined' && ORDER_API_URL) ? ORDER_API_URL : '';
+}
+
+function applyLiveStock(stockMap) {
+  if (!stockMap || typeof stockMap !== 'object') return false;
+  let applied = false;
+  for (const product of products) {
+    for (const sizeInfo of product.sizes) {
+      const key = product.id + ':' + sizeInfo.size;
+      if (Object.prototype.hasOwnProperty.call(stockMap, key)) {
+        sizeInfo.stock = Math.max(0, Number(stockMap[key]) || 0);
+        applied = true;
+      }
+    }
+  }
+  if (applied) window.dispatchEvent(new Event('amero:stockchange'));
+  return applied;
+}
+
+async function refreshLiveStock() {
+  try {
+    const res = await fetch(orderApiBase() + '/api/stock', {
+      method: 'GET',
+      headers: { 'Accept': 'application/json' }
+    });
+    if (!res.ok) return false;
+    const data = await res.json();
+    if (!data || !data.ok) return false;
+    return applyLiveStock(data.stock);
+  } catch {
+    return false;
+  }
+}
+
+function onStockChange(callback) {
+  window.addEventListener('amero:stockchange', callback);
+}
+
+// Keep the snapshot fresh while the tab stays open: refresh whenever the page
+// regains focus / becomes visible, and on a slow interval while it is visible
+// (so two buyers staring at the same 1-of-1 piece don't both see it "in stock").
+const STOCK_REFRESH_MS = 60000;
+let stockRefreshTimer = null;
+
+function startStockAutoRefresh() {
+  window.addEventListener('focus', refreshLiveStock);
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') refreshLiveStock();
+  });
+  clearInterval(stockRefreshTimer);
+  stockRefreshTimer = setInterval(() => {
+    if (document.visibilityState === 'visible') refreshLiveStock();
+  }, STOCK_REFRESH_MS);
+}
+
 // ---------- CART OPERATIONS ----------
 function addToCart(productId, size, qty) {
   qty = qty || 1;
@@ -308,10 +377,12 @@ function showToast(message) {
 
 // ---------- PRODUCT CARD MARKUP (shared across pages) ----------
 function productCardMarkup(p, sizesAttr) {
+  const soldOut = isProductSoldOut(p);
   return `
-    <a href="product.html?id=${p.id}" class="product-card reveal" data-id="${p.id}">
+    <a href="product.html?id=${p.id}" class="product-card reveal${soldOut ? ' sold-out' : ''}" data-id="${p.id}">
       <div class="product-img">
         <img ${imgAttr(p.img, p.name, sizesAttr || '(max-width: 640px) 45vw, 25vw')}>
+        ${soldOut ? '<span class="sold-badge">Sold Out</span>' : ''}
       </div>
       <div class="product-info">
         <h3 class="product-name">${escapeHtml(p.name)}</h3>
@@ -531,4 +602,15 @@ document.addEventListener('DOMContentLoaded', () => {
   initNavbar();
   updateNavCartCount();
   initScrollReveal();
+
+  // Only pages that render product availability need the live snapshot
+  // (contact/policies have no products, so they skip the network call).
+  const needsLiveStock = document.getElementById('featuredGrid') ||
+    document.getElementById('productsGrid') ||
+    document.getElementById('productDetail') ||
+    document.getElementById('cartItems');
+  if (needsLiveStock) {
+    refreshLiveStock();
+    startStockAutoRefresh();
+  }
 });

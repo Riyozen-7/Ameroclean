@@ -30,6 +30,11 @@ if (-not $?) { Write-Error 'Node.js is required (18+).' }
 git --version | Out-Null
 if (-not $?) { Write-Error 'git is required.' }
 
+# Catalog drift guard: the display catalog (js/app.js) and the validation
+# catalogs (server/catalog.js + worker/worker.mjs) must agree before shipping.
+node scripts/check-catalog.mjs
+if ($LASTEXITCODE -ne 0) { Write-Error 'Catalog drift detected — sync js/app.js, server/catalog.js, and worker/worker.mjs before deploying.' }
+
 $branch = git rev-parse --abbrev-ref HEAD
 Write-Host "Pushing branch '$branch' from '$root'"
 
@@ -88,9 +93,8 @@ else { "$chatId" | wrangler secret put TELEGRAM_CHAT_ID }
 Step 'Wiring the site to the Worker'
 Set-Location $root
 $config = Join-Path $root 'js/config.js'
-$newLine = "const ORDER_API_URL = '$workerUrl';"
-(Get-Content $config -Raw) -replace "const ORDER_API_URL = '(.*)';", $newLine | Set-Content $config -NoNewline
-Write-Host "ORDER_API_URL set to $workerUrl"
+(Get-Content $config -Raw) -replace "const PROD_ORDER_API_URL = '[^']*';", "const PROD_ORDER_API_URL = '$workerUrl';" | Set-Content $config -NoNewline
+Write-Host "PROD_ORDER_API_URL set to $workerUrl"
 
 git add js/config.js
 git commit -m 'Point checkout at deployed Cloudflare Worker order API' | Out-Null

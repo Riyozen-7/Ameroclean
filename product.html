@@ -42,6 +42,7 @@
 
   <!-- SCRIPTS -->
   <script src="js/layout.js"></script>
+  <script src="js/config.js"></script>
   <script src="js/app.js"></script>
   <script>
     /* PRODUCT PAGE — render detail from ?id= query param.
@@ -77,7 +78,7 @@
         </div>
 
         <div class="product-detail-info reveal in-view">
-          <div class="stock-badge" style="margin-bottom: var(--sp-sm);">Only 1 piece per size</div>
+          <div class="stock-badge" id="stockBadge" style="margin-bottom: var(--sp-sm);">Only 1 piece per size</div>
           <h1 class="product-name" id="productName"></h1>
           <div class="product-price" id="productPrice"></div>
           <p class="product-desc" id="productDesc"></p>
@@ -156,10 +157,14 @@
       });
 
       /* ---------- Size chips (incremental) ---------- */
+      /* Auto-select a purchasable size. If the current selection sells out
+         (live-stock refresh, or another tab's cart), move to the next one. */
       function renderSizes() {
-        if (!selectedSize) {
+        const currentRem = selectedSize ? stockRemaining(product.id, selectedSize) : 0;
+        if (!selectedSize || currentRem <= 0) {
           const firstAvail = product.sizes.find(s => stockRemaining(product.id, s.size) > 0);
-          selectedSize = firstAvail ? firstAvail.size : product.sizes[0].size;
+          if (firstAvail) selectedSize = firstAvail.size;
+          else if (!selectedSize && product.sizes.length) selectedSize = product.sizes[0].size;
         }
         sizeChips.innerHTML = product.sizes.map(s => {
           const rem = stockRemaining(product.id, s.size);
@@ -168,6 +173,12 @@
                           data-size="${escapeHtml(s.size)}" ${out ? 'disabled' : ''}
                           aria-pressed="${s.size === selectedSize}">${escapeHtml(s.size)}${out ? ' · Out' : ''}</button>`;
         }).join('');
+
+        const badge = document.getElementById('stockBadge');
+        if (badge) {
+          const total = product.sizes.reduce((sum, s) => sum + (s.stock || 0), 0);
+          badge.textContent = total <= 0 ? 'Sold out' : 'Only 1 piece per size';
+        }
       }
 
       sizeChips.addEventListener('click', (e) => {
@@ -232,6 +243,12 @@
         syncState();
       });
 
+      /* Live stock snapshot arrived from the API — reflect real availability. */
+      onStockChange(() => {
+        renderSizes();
+        syncState();
+      });
+
       /* ---------- Init ---------- */
       renderGallery();
       renderSizes();
@@ -242,12 +259,17 @@
       const related = products.filter(p => p.category === product.category && p.id !== product.id).slice(0, 3);
       const relatedGrid = document.getElementById('relatedGrid');
 
-      if (related.length) {
-        relatedGrid.innerHTML = related.map(p => productCardMarkup(p)).join('');
-      } else {
-        relatedGrid.innerHTML = '<div class="empty-state"><p>More pieces coming soon.</p></div>';
+      function renderRelated() {
+        if (related.length) {
+          relatedGrid.innerHTML = related.map(p => productCardMarkup(p)).join('');
+        } else {
+          relatedGrid.innerHTML = '<div class="empty-state"><p>More pieces coming soon.</p></div>';
+        }
+        initScrollReveal();
       }
-      initScrollReveal();
+
+      renderRelated();
+      onStockChange(renderRelated);
     })();
   </script>
 </body>

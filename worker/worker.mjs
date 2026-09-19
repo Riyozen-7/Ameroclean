@@ -11,9 +11,14 @@
      wrangler secret put TELEGRAM_BOT_TOKEN
      wrangler secret put TELEGRAM_CHAT_ID
      wrangler secret put RESTOCK_KEY     # admin key for the restock endpoint
-     # optional extra allowed frontend origins:
+     # optional extra allowed frontend origins (comma-separated full origins;
+     # required for a custom domain — GitHub Pages and *.pages.dev are built in):
      wrangler secret put ALLOWED_ORIGINS
-   Then paste the printed workers.dev URL into js/config.js (ORDER_API_URL).
+   Then paste the printed workers.dev URL into PROD_ORDER_API_URL (js/config.js).
+
+   Endpoints:
+     GET  <worker>/api/stock   — public live stock snapshot { ok, stock }
+     POST <worker>/api/order   — place an order / admin restock
 
    Restock (after a sale ships):
      curl -X POST <worker>/api/order -H "X-Admin-Key: <RESTOCK_KEY>" \
@@ -194,15 +199,24 @@ async function notifyTelegram(order, paymentLabel, env) {
 }
 
 // ---------- CORS: allow GitHub Pages + localhost + explicit origins ----------
-function isAllowedOrigin(origin, env) {
+// Custom domains (and Cloudflare Pages preview URLs) must be listed in the
+// comma-separated ALLOWED_ORIGINS secret, e.g.
+//   wrangler secret put ALLOWED_ORIGINS
+//   -> https://amero.com,https://www.amero.com
+export function isAllowedOrigin(origin, env) {
   if (!origin) return false;
   try {
     const u = new URL(origin);
     if (u.protocol !== 'https:' && u.protocol !== 'http:') return false;
-    const host = u.hostname;
-    if (host === 'localhost' || host.endsWith('.github.io')) return true;
-    const custom = String(env.ALLOWED_ORIGINS || '').split(',').map(s => s.trim()).filter(Boolean);
-    return custom.includes(origin);
+    const host = u.hostname.toLowerCase();
+    if (host === 'localhost' || host === '127.0.0.1' || host === '::1') return true;
+    if (host.endsWith('.github.io') || host.endsWith('.pages.dev')) return true;
+    const normalized = origin.replace(/\/+$/, '').toLowerCase();
+    const custom = String(env.ALLOWED_ORIGINS || '')
+      .split(',')
+      .map(s => s.trim().replace(/\/+$/, '').toLowerCase())
+      .filter(Boolean);
+    return custom.includes(normalized);
   } catch {
     return false;
   }
@@ -230,6 +244,13 @@ export class AmeroStore {
   }
 
   async fetch(request) {
+    // Live stock snapshot — read-only, served straight from the DO so the
+    // storefront can show the same availability the order path enforces.
+    if (request.method === 'GET') {
+      const stock = (await this.ctx.storage.get('stock')) || defaultStock();
+      return json(200, { ok: true, stock });
+    }
+
     if (request.method !== 'POST') return json(405, { ok: false, error: 'Method not allowed.' });
 
     // Admin restock endpoint (guarded by the RESTOCK_KEY secret).
@@ -334,6 +355,7 @@ export class AmeroStore {
 export default {
   async fetch(request, env) {
     const origin = request.headers.get('Origin');
+    const { pathname } = new URL(request.url);
 
     // CSRF guard: a browser request from an unlisted origin is rejected.
     if (origin) {
@@ -374,6 +396,23 @@ const inner = await stub.fetch(new Request('https://amero.local/api/order', {
       } catch (err) {
         console.error('[amero-api] order failed:', err.message);
         return json(500, { ok: false, error: 'Internal error — please try again or order via WhatsApp.' });
+      }
+    }
+
+    if (request.method === 'GET' && pathname === '/api/stock') {
+      const id = env.AMERO_STORE.idFromName('amero');
+      const stub = env.AMERO_STORE.get(id);
+      try {
+        const inner = await stub.fetch(new Request('https://amero.local/api/stock', { method: 'GET' }));
+        const headers = Object.assign({}, CORS_BASE, {
+          'Content-Type': 'application/json; charset=utf-8',
+          'Cache-Control': 'no-store'
+        });
+        if (origin) headers['Access-Control-Allow-Origin'] = origin;
+        return new Response(inner.body, { status: inner.status, headers });
+      } catch (err) {
+        console.error('[amero-api] stock fetch failed:', err.message);
+        return json(500, { ok: false, error: 'Could not load stock.' });
       }
     }
 

@@ -5,11 +5,15 @@
 #   wrangler deploy
 #   wrangler secret put TELEGRAM_BOT_TOKEN
 #   wrangler secret put TELEGRAM_CHAT_ID
-#   # (optional) exact extra frontend origins beyond *.github.io and localhost:
+#   # (optional) exact extra frontend origins beyond *.github.io and *.pages.dev:
 #   wrangler secret put ALLOWED_ORIGINS
 #
-# Then paste the workers.dev URL from `wrangler deploy` into ../../js/config.js
-# (ORDER_API_URL) and re-push the site.
+# Endpoints:
+#   GET  /api/stock   live stock snapshot for the storefront
+#   POST /api/order   place an order / admin restock
+#
+# Then paste the workers.dev URL from `wrangler deploy` into
+# js/config.js (PROD_ORDER_API_URL) and re-push the site.
 
 name = "amero-api"
 main = "worker.mjs"

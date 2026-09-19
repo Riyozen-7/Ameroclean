@@ -11,6 +11,7 @@
 
    Exposes:
      GET  /            — serves the static storefront
+     GET  /api/stock   — live stock snapshot { ok, stock } for the storefront
      POST /api/order   — validates + records an order, reserves stock, and
                          sends the Telegram notification. The token stays on
                          the server; prices, delivery fees, and stock are taken
@@ -332,6 +333,12 @@ function serveStatic(req, res, urlPath) {
 /* ---------- HTTP SERVER ---------- */
 const server = http.createServer(async (req, res) => {
   const { pathname } = new URL(req.url, 'http://localhost');
+
+  // Live stock snapshot for the storefront (read-only).
+  if (req.method === 'GET' && pathname === '/api/stock') {
+    sendJson(res, 200, { ok: true, stock: ensureStock() });
+    return;
+  }
 
   if (req.method === 'POST' && pathname === '/api/order') {
     let body;
