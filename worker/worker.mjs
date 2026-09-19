@@ -10,9 +10,15 @@
      wrangler deploy                     # first deploy creates the DO
      wrangler secret put TELEGRAM_BOT_TOKEN
      wrangler secret put TELEGRAM_CHAT_ID
+     wrangler secret put RESTOCK_KEY     # admin key for the restock endpoint
      # optional extra allowed frontend origins:
      wrangler secret put ALLOWED_ORIGINS
    Then paste the printed workers.dev URL into js/config.js (ORDER_API_URL).
+
+   Restock (after a sale ships):
+     curl -X POST <worker>/api/order -H "X-Admin-Key: <RESTOCK_KEY>" \
+          -H "Content-Type: application/json" -d '{}'                    # full restock
+     -d '{"items":[{"id":2,"size":"M"}]}'                                # specific pieces
    ============================================ */
 
 // ---------- SERVER-SIDE CATALOG (mirror of server/catalog.js) ----------
@@ -38,6 +44,16 @@ export function normalizePhone(raw) {
 
 export function stockKey(productId, size) {
   return productId + ':' + size;
+}
+
+// Constant-time string comparison for the admin restock key.
+function secureEqual(a, b) {
+  const x = String(a == null ? '' : a);
+  const y = String(b == null ? '' : b);
+  if (x.length !== y.length) return false;
+  let diff = 0;
+  for (let i = 0; i < x.length; i++) diff |= x.charCodeAt(i) ^ y.charCodeAt(i);
+  return diff === 0;
 }
 
 export function defaultStock() {
@@ -216,6 +232,51 @@ export class AmeroStore {
   async fetch(request) {
     if (request.method !== 'POST') return json(405, { ok: false, error: 'Method not allowed.' });
 
+    // Admin restock endpoint (guarded by the RESTOCK_KEY secret).
+    //   curl -X POST <worker>/api/order -H "X-Admin-Key: <RESTOCK_KEY>" -H "Content-Type: application/json" -d '{}'
+    //   -d '{"items":[{"id":2,"size":"M"},{"id":5,"size":"XL"}]}'  -> restock only those pieces
+    //   -d '{}'                                                    -> full restock to catalog defaults
+    if (request.headers.has('X-Admin-Key')) {
+      const expected = this.env.RESTOCK_KEY || '';
+      if (!expected) return json(503, { ok: false, error: 'RESTOCK_KEY is not configured on the Worker.' });
+      if (!secureEqual(request.headers.get('X-Admin-Key'), expected)) return json(401, { ok: false, error: 'Unauthorized.' });
+
+      let body = null;
+      try { body = await request.json(); } catch { /* empty body -> full restock */ }
+      const items = body && Array.isArray(body.items) && body.items.length ? body.items : null;
+
+      let result = null;
+      await this.ctx.blockConcurrencyWhile(async () => {
+        const current = (await this.ctx.storage.get('stock')) || defaultStock();
+        const next = items ? Object.assign({}, current) : defaultStock();
+        const updated = [];
+        if (items) {
+          for (const it of items) {
+            const id = Number(it && it.id);
+            const size = String((it && it.size) || '').trim();
+            const key = stockKey(id, size);
+            if (!(key in current)) continue;
+            const product = CATALOG.find(p => p.id === id);
+            const sizeInfo = product && product.sizes.find(s => s.size === size);
+            next[key] = (sizeInfo && sizeInfo.stock) || 1;
+            updated.push(key);
+          }
+        } else {
+          for (const k of Object.keys(next)) updated.push(k);
+        }
+        await this.ctx.storage.put('stock', next);
+        result = { ok: true, message: updated.join(', '), stock: next };
+      });
+
+      return json(200, {
+        ok: true,
+        message: items
+          ? 'Restocked: ' + result.message
+          : 'Full restock complete: ' + result.message,
+        stock: result.stock
+      });
+    }
+
     let payload;
     try {
       payload = await request.json();
@@ -299,11 +360,14 @@ export default {
       const id = env.AMERO_STORE.idFromName('amero');
       const stub = env.AMERO_STORE.get(id);
       try {
-        const inner = await stub.fetch(new Request('https://amero.local/api/order', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
-        }));
+const inner = await stub.fetch(new Request('https://amero.local/api/order', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(request.headers.has('X-Admin-Key') ? { 'X-Admin-Key': request.headers.get('X-Admin-Key') } : {})
+        },
+        body: JSON.stringify(payload)
+      }));
         const headers = Object.assign({}, CORS_BASE);
         if (origin) headers['Access-Control-Allow-Origin'] = origin;
         return new Response(inner.body, { status: inner.status, headers });
