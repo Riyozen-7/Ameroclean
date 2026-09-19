@@ -12,4 +12,4 @@
  *
  * Update this file, commit, and push to redeploy the site.
  */
-const ORDER_API_URL = '';
+const ORDER_API_URL = 'https://amero-api.habiburrashidrohan7508.workers.dev';
