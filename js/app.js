@@ -270,21 +270,81 @@ function onStockChange(callback) {
   window.addEventListener('amero:stockchange', callback);
 }
 
-// Keep the snapshot fresh while the tab stays open: refresh whenever the page
-// regains focus / becomes visible, and on a slow interval while it is visible
-// (so two buyers staring at the same 1-of-1 piece don't both see it "in stock").
+// ---------- REAL-TIME STOCK (WebSocket push, poll fallback) ----------
+// The order API pushes a fresh snapshot the instant a piece sells or is
+// restocked, so an open tab flips to "Sold out" immediately. If the socket
+// can't be established we fall back to polling — the shop works either way.
 const STOCK_REFRESH_MS = 60000;
+const WS_OPEN = 1;
 let stockRefreshTimer = null;
+let stockSocket = null;
+let stockReconnectTimer = null;
+let stockReconnectDelay = 1000;
+
+function stockSocketUrl() {
+  const base = orderApiBase();
+  let wsOrigin;
+  if (base) {
+    wsOrigin = base.replace(/^http/i, 'ws');
+  } else {
+    const proto = location.protocol === 'https:' ? 'wss://' : 'ws://';
+    wsOrigin = proto + location.host;
+  }
+  return wsOrigin.replace(/\/+$/, '') + '/api/stock/ws';
+}
+
+function stockSocketLive() {
+  return !!stockSocket && stockSocket.readyState === WS_OPEN;
+}
+
+function scheduleStockReconnect() {
+  clearTimeout(stockReconnectTimer);
+  stockReconnectTimer = setTimeout(connectStockSocket, stockReconnectDelay);
+  stockReconnectDelay = Math.min(stockReconnectDelay * 2, 30000);
+}
+
+function connectStockSocket() {
+  if (typeof WebSocket === 'undefined') return;
+  if (stockSocket && stockSocket.readyState <= WS_OPEN) return;
+  let ws;
+  try {
+    ws = new WebSocket(stockSocketUrl());
+  } catch {
+    scheduleStockReconnect();
+    return;
+  }
+  stockSocket = ws;
+
+  ws.addEventListener('open', () => {
+    stockReconnectDelay = 1000;
+    refreshLiveStock(); // reconcile anything missed while disconnected
+  });
+  ws.addEventListener('message', (event) => {
+    let msg = null;
+    try { msg = JSON.parse(event.data); } catch { return; }
+    if (msg && msg.type === 'stock' && msg.stock) applyLiveStock(msg.stock);
+  });
+  ws.addEventListener('close', () => {
+    if (stockSocket === ws) stockSocket = null;
+    scheduleStockReconnect();
+  });
+  ws.addEventListener('error', () => {
+    try { ws.close(); } catch { /* ignore */ }
+  });
+}
 
 function startStockAutoRefresh() {
-  window.addEventListener('focus', refreshLiveStock);
+  window.addEventListener('focus', () => {
+    if (!stockSocketLive()) refreshLiveStock();
+  });
   document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible') refreshLiveStock();
+    if (document.visibilityState === 'visible' && !stockSocketLive()) refreshLiveStock();
   });
   clearInterval(stockRefreshTimer);
   stockRefreshTimer = setInterval(() => {
-    if (document.visibilityState === 'visible') refreshLiveStock();
+    if (document.visibilityState === 'visible' && !stockSocketLive()) refreshLiveStock();
   }, STOCK_REFRESH_MS);
+  connectStockSocket();
 }
 
 // ---------- CART OPERATIONS ----------

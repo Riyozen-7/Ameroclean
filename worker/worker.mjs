@@ -17,8 +17,9 @@
    Then paste the printed workers.dev URL into PROD_ORDER_API_URL (js/config.js).
 
    Endpoints:
-     GET  <worker>/api/stock   — public live stock snapshot { ok, stock }
-     POST <worker>/api/order   — place an order / admin restock
+     GET  <worker>/api/stock    — public live stock snapshot { ok, stock }
+     WS   <worker>/api/stock/ws — real-time stock push (instant sold-out)
+     POST <worker>/api/order    — place an order / admin restock
 
    Restock (after a sale ships):
      curl -X POST <worker>/api/order -H "X-Admin-Key: <RESTOCK_KEY>" \
@@ -243,12 +244,35 @@ export class AmeroStore {
     this.env = env;
   }
 
+  // Current stock map (defaults until the first order/restock writes one).
+  async stockSnapshot() {
+    return (await this.ctx.storage.get('stock')) || defaultStock();
+  }
+
+  // Push the latest snapshot to every connected storefront tab. Uses the
+  // WebSocket Hibernation API, so idle tabs cost nothing while still getting
+  // an instant update the moment a piece sells or is restocked.
+  broadcastStock(stock) {
+    const payload = JSON.stringify({ type: 'stock', stock, at: Date.now() });
+    for (const ws of this.ctx.getWebSockets()) {
+      try { ws.send(payload); } catch { /* closed between getWebSockets and send */ }
+    }
+  }
+
   async fetch(request) {
+    // Real-time stock channel: instant sold-out to every open tab.
+    const upgrade = request.headers.get('Upgrade');
+    if (upgrade && upgrade.toLowerCase() === 'websocket') {
+      const pair = new WebSocketPair();
+      this.ctx.acceptWebSocket(pair[1]);
+      pair[1].send(JSON.stringify({ type: 'stock', stock: await this.stockSnapshot(), at: Date.now() }));
+      return new Response(null, { status: 101, webSocket: pair[0] });
+    }
+
     // Live stock snapshot — read-only, served straight from the DO so the
     // storefront can show the same availability the order path enforces.
     if (request.method === 'GET') {
-      const stock = (await this.ctx.storage.get('stock')) || defaultStock();
-      return json(200, { ok: true, stock });
+      return json(200, { ok: true, stock: await this.stockSnapshot() });
     }
 
     if (request.method !== 'POST') return json(405, { ok: false, error: 'Method not allowed.' });
@@ -288,6 +312,8 @@ export class AmeroStore {
         await this.ctx.storage.put('stock', next);
         result = { ok: true, message: updated.join(', '), stock: next };
       });
+
+      this.broadcastStock(result.stock);
 
       return json(200, {
         ok: true,
@@ -331,6 +357,9 @@ export class AmeroStore {
       return json(409, { ok: false, code: 'OUT_OF_STOCK', error: message, unavailable: details });
     }
 
+    // Tell every open tab the moment a piece becomes unavailable.
+    this.broadcastStock(result.stock);
+
     const paymentLabel = PAYMENT_LABELS[validated.payment.method];
     const notified = await notifyTelegram(result.order, paymentLabel, this.env);
 
@@ -348,6 +377,25 @@ export class AmeroStore {
       total: result.order.total,
       error: notified ? undefined : 'Your order was recorded, but the notification service is unavailable.'
     });
+  }
+
+  // WebSocket Hibernation handlers — the DO sleeps between stock changes.
+  async webSocketMessage(ws, message) {
+    let data = null;
+    try { data = JSON.parse(message); } catch { return; }
+    if (data && data.type === 'refresh') {
+      try {
+        ws.send(JSON.stringify({ type: 'stock', stock: await this.stockSnapshot(), at: Date.now() }));
+      } catch { /* socket closed */ }
+    }
+  }
+
+  async webSocketClose(ws, code, reason) {
+    try { ws.close(code, reason); } catch { /* already closing */ }
+  }
+
+  async webSocketError(ws) {
+    try { ws.close(1011, 'WebSocket error'); } catch { /* already closing */ }
   }
 }
 
@@ -369,6 +417,13 @@ export default {
       }
     } else if (request.method === 'OPTIONS') {
       return new Response(null, { status: 204, headers: CORS_BASE });
+    }
+
+    // Real-time stock channel — forward the WebSocket upgrade to the DO, which
+    // pushes an instant snapshot whenever a piece sells or is restocked.
+    if (pathname === '/api/stock/ws') {
+      const id = env.AMERO_STORE.idFromName('amero');
+      return env.AMERO_STORE.get(id).fetch(request);
     }
 
     if (request.method === 'POST') {

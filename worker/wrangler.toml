@@ -9,8 +9,9 @@
 #   wrangler secret put ALLOWED_ORIGINS
 #
 # Endpoints:
-#   GET  /api/stock   live stock snapshot for the storefront
-#   POST /api/order   place an order / admin restock
+#   GET  /api/stock      live stock snapshot for the storefront
+#   WS   /api/stock/ws   real-time stock push (instant sold-out)
+#   POST /api/order      place an order / admin restock
 #
 # Then paste the workers.dev URL from `wrangler deploy` into
 # js/config.js (PROD_ORDER_API_URL) and re-push the site.
