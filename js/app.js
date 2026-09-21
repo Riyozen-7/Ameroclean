@@ -759,16 +759,26 @@ function initNavbar() {
   }
 
   if (menuToggle && navLinks) {
+    const backdrop = document.getElementById('navBackdrop');
+
+    function setMenu(open) {
+      menuToggle.classList.toggle('active', open);
+      navLinks.classList.toggle('open', open);
+      if (backdrop) backdrop.classList.toggle('open', open);
+      menuToggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+    }
+
+    function closeMenu() { setMenu(false); }
+
     menuToggle.addEventListener('click', () => {
-      menuToggle.classList.toggle('active');
-      navLinks.classList.toggle('open');
-      menuToggle.setAttribute('aria-expanded', navLinks.classList.contains('open') ? 'true' : 'false');
+      setMenu(!navLinks.classList.contains('open'));
+    });
+    if (backdrop) backdrop.addEventListener('click', closeMenu);
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') closeMenu();
     });
     navLinks.querySelectorAll('.nav-link, .nav-cart').forEach(link => {
-      link.addEventListener('click', () => {
-        menuToggle.classList.remove('active');
-        navLinks.classList.remove('open');
-      });
+      link.addEventListener('click', closeMenu);
     });
   }
 
