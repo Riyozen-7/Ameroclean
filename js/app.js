@@ -124,11 +124,11 @@ const products = [
     name: 'Brown Ribbed Half-Sleeve T-Shirt',
     desc: 'Chest 20 · Length 27 · Ribbed knit half-sleeve tee by Mike Designs.',
     price: 600,
-    img: 'images/product-7/IMG_6127.jpg',
+    img: 'images/product-7/front.jpg',
     images: [
-      'images/product-7/IMG_6127.jpg',
+      'images/product-7/front.jpg',
       'images/product-7/IMG_6132(1).jpg',
-      'images/product-7/IMG_6136.jpg'
+      'images/product-7/back.webp'
     ],
     sizes: [
       { size: 'L', stock: 1 }
@@ -142,10 +142,10 @@ const products = [
     name: 'White Printed Drop-Shoulder T-Shirt',
     desc: 'Chest 21 · Length 28 · White printed drop-shoulder tee.',
     price: 450,
-    img: 'images/product-8/IMG_6034.jpg',
+    img: 'images/product-8/front.jpg',
     images: [
-      'images/product-8/IMG_6034.jpg',
-      'images/product-8/IMG_6028.jpg'
+      'images/product-8/front.jpg',
+      'images/product-8/IMG_6034.jpg'
     ],
     sizes: [
       { size: 'L', stock: 1 }
@@ -159,10 +159,10 @@ const products = [
     name: 'Short-Sleeve T-Shirt',
     desc: 'Chest 21 · Length 28.5 · Classic short-sleeve t-shirt.',
     price: 450,
-    img: 'images/product-9/IMG_6041.jpg',
+    img: 'images/product-9/front.jpg',
     images: [
-      'images/product-9/IMG_6041.jpg',
-      'images/product-9/IMG_6035.jpg'
+      'images/product-9/front.jpg',
+      'images/product-9/IMG_6041.jpg'
     ],
     sizes: [
       { size: 'L', stock: 1 }
@@ -176,11 +176,11 @@ const products = [
     name: 'Cream Ribbed Knit Polo Shirt',
     desc: 'Chest 18 · Length 26 · Cream ribbed-knit polo shirt.',
     price: 499,
-    img: 'images/product-10/IMG_6145.jpg',
+    img: 'images/product-10/front.jpg',
     images: [
+      'images/product-10/front.jpg',
       'images/product-10/IMG_6145.jpg',
-      'images/product-10/IMG_6143.jpg',
-      'images/product-10/IMG_6140.jpg'
+      'images/product-10/IMG_6143.jpg'
     ],
     sizes: [
       { size: 'M', stock: 1 }
@@ -194,10 +194,10 @@ const products = [
     name: 'Amsterdam Boxy Graphic Crew Neck T-Shirt',
     desc: 'Chest 24 · Length 29 · Wine-colored boxy graphic crew neck from Connor Singapore.',
     price: 450,
-    img: 'images/product-11/IMG_6046.jpg',
+    img: 'images/product-11/front.jpg',
     images: [
-      'images/product-11/IMG_6046.jpg',
-      'images/product-11/IMG_6051.jpg'
+      'images/product-11/front.jpg',
+      'images/product-11/IMG_6046.jpg'
     ],
     sizes: [
       { size: 'XL', stock: 1 }
@@ -211,9 +211,9 @@ const products = [
     name: 'Premium Puff-Printed T-Shirt',
     desc: '280 GSM · 100% premium feel puff-print tee.',
     price: 450,
-    img: 'images/product-12/IMG_6010.jpg',
+    img: 'images/product-12/front.webp',
     images: [
-      'images/product-12/IMG_6010.jpg',
+      'images/product-12/front.webp',
       'images/product-12/IMG_6013.jpg',
       'images/product-12/IMG_6016.jpg',
       'images/product-12/IMG_6018.jpg'
@@ -232,9 +232,9 @@ const products = [
     name: 'Retro-Style Short-Sleeve Knitted Polo Shirt',
     desc: 'Chest 21 · Length 27.5 · Pure class retro-style knitted polo shirt.',
     price: 800,
-    img: 'images/product-13/IMG_6058.jpg',
+    img: 'images/product-13/front.webp',
     images: [
-      'images/product-13/IMG_6058.jpg',
+      'images/product-13/front.webp',
       'images/product-13/IMG_6059.jpg',
       'images/product-13/IMG_6066.jpg'
     ],
