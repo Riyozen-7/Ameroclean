@@ -58,6 +58,52 @@ const CATALOG = [
     name: 'Premium Old Money Waffle-Knit Shirt',
     price: 800,
     sizes: [{ size: 'L', stock: 1 }]
+  },
+  {
+    id: 7,
+    name: 'Brown Ribbed Half-Sleeve T-Shirt',
+    price: 600,
+    sizes: [{ size: 'L', stock: 1 }]
+  },
+  {
+    id: 8,
+    name: 'White Printed Drop-Shoulder T-Shirt',
+    price: 450,
+    sizes: [{ size: 'L', stock: 1 }]
+  },
+  {
+    id: 9,
+    name: 'Short-Sleeve T-Shirt',
+    price: 450,
+    sizes: [{ size: 'L', stock: 1 }]
+  },
+  {
+    id: 10,
+    name: 'Cream Ribbed Knit Polo Shirt',
+    price: 499,
+    sizes: [{ size: 'M', stock: 1 }]
+  },
+  {
+    id: 11,
+    name: 'Amsterdam Boxy Graphic Crew Neck T-Shirt',
+    price: 450,
+    sizes: [{ size: 'XL', stock: 1 }]
+  },
+  {
+    id: 12,
+    name: 'Premium Puff-Printed T-Shirt',
+    price: 450,
+    sizes: [
+      { size: 'M', stock: 1 },
+      { size: 'L', stock: 1 },
+      { size: 'XL', stock: 1 }
+    ]
+  },
+  {
+    id: 13,
+    name: 'Retro-Style Short-Sleeve Knitted Polo Shirt',
+    price: 800,
+    sizes: [{ size: 'L', stock: 1 }]
   }
 ];
 

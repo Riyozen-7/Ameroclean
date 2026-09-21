@@ -25,7 +25,7 @@ check('validatePayload rejects missing txn', !!validatePayload({ customer: valid
 check('validatePayload rejects empty cart', !!validatePayload({ customer: validPayload().customer, payment: { method: 'cod' }, items: [] }).error);
 
 const stock = defaultStock();
-check('defaultStock mirrors catalog (12 size keys)', Object.keys(stock).length === 12 && stock['1:L/XXL'] === 1 && stock['6:L'] === 1);
+check('defaultStock mirrors catalog (21 size keys)', Object.keys(stock).length === 21 && stock['1:L/XXL'] === 1 && stock['6:L'] === 1 && stock['12:XL'] === 1 && stock['13:L'] === 1);
 const r1 = applyReservation(stock, v);
 check('applyReservation reserves both lines', r1.ok && r1.stock['2:M'] === 0 && r1.stock['3:L'] === 0);
 check('applyReservation totals', r1.ok && r1.order.subtotal === 900 && r1.order.delivery === 70 && r1.order.total === 970);
