@@ -371,6 +371,36 @@ function orderApiBase() {
   return (typeof ORDER_API_URL !== 'undefined' && ORDER_API_URL) ? ORDER_API_URL : '';
 }
 
+function reconcileCartStock() {
+  let changed = false;
+  let hasSoldOut = false;
+  const updatedCart = [];
+  for (const item of cart) {
+    const product = findProduct(item.id);
+    const sizeInfo = product && product.sizes.find(s => s.size === item.size);
+    const available = sizeInfo ? sizeInfo.stock : 0;
+    if (available <= 0) {
+      changed = true;
+      hasSoldOut = true;
+    } else if (item.qty > available) {
+      item.qty = available;
+      updatedCart.push(item);
+      changed = true;
+    } else {
+      updatedCart.push(item);
+    }
+  }
+  if (changed) {
+    cart = updatedCart;
+    saveCart(cart);
+    updateNavCartCount();
+    notifyCartChanged();
+    if (hasSoldOut && typeof showToast === 'function') {
+      showToast('An item in your cart is no longer available');
+    }
+  }
+}
+
 function applyLiveStock(stockMap) {
   if (!stockMap || typeof stockMap !== 'object') return false;
   let applied = false;
@@ -383,7 +413,10 @@ function applyLiveStock(stockMap) {
       }
     }
   }
-  if (applied) window.dispatchEvent(new Event('amero:stockchange'));
+  if (applied) {
+    reconcileCartStock();
+    window.dispatchEvent(new Event('amero:stockchange'));
+  }
   return applied;
 }
 
@@ -545,7 +578,7 @@ function changeQty(productId, size, delta) {
 }
 
 function getCartTotal() {
-  return cart.reduce((sum, item) => sum + item.price * item.qty, 0);
+  return Math.round(cart.reduce((sum, item) => sum + (item.price * item.qty), 0));
 }
 
 function getCartItemCount() {

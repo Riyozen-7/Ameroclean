@@ -1,5 +1,5 @@
 /* Smoke-test the Worker's pure order logic in Node before deploying. */
-import { normalizePhone, validatePayload, applyReservation, defaultStock, buildOrderMessage, PAYMENT_LABELS, isAllowedOrigin } from './worker.mjs';
+import { normalizePhone, validatePayload, applyReservation, defaultStock, buildOrderMessage, PAYMENT_LABELS, isAllowedOrigin, AmeroStore } from './worker.mjs';
 
 let failures = 0;
 function check(label, cond) {
@@ -49,6 +49,16 @@ check('origin: custom domain with trailing slash matches', isAllowedOrigin('http
 check('origin: unknown domain rejected', isAllowedOrigin('https://evil.example', {}) === false);
 check('origin: non-http scheme rejected', isAllowedOrigin('ftp://amero.com', {}) === false);
 check('origin: empty rejected', isAllowedOrigin('', {}) === false);
+
+// Rate limiter test
+const mockStore = new AmeroStore({}, {});
+let rlPass = true;
+for (let i = 0; i < 5; i++) {
+  if (!mockStore.checkRateLimit('192.168.1.1', 5, 60000)) rlPass = false;
+}
+const rlBlocked = !mockStore.checkRateLimit('192.168.1.1', 5, 60000);
+check('rate limiter allows first 5 requests', rlPass);
+check('rate limiter throttles 6th request', rlBlocked);
 
 console.log(failures ? `\n${failures} FAILURE(S)` : '\nALL PASS');
 process.exit(failures ? 1 : 0);

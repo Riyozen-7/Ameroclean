@@ -61,6 +61,29 @@ loadEnvFile();
 
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || '';
 const CHAT_ID = process.env.TELEGRAM_CHAT_ID || '';
+const ADMIN_KEY = process.env.ADMIN_KEY || process.env.RESTOCK_KEY || '';
+
+/* ---------- RATE LIMITING & CONCURRENCY QUEUE ---------- */
+const ipRateMap = new Map();
+function checkRateLimit(ip, limit = 5, windowMs = 60000) {
+  if (!ip) return true;
+  const now = Date.now();
+  const entry = ipRateMap.get(ip);
+  if (!entry || now > entry.resetAt) {
+    ipRateMap.set(ip, { count: 1, resetAt: now + windowMs });
+    return true;
+  }
+  entry.count++;
+  if (entry.count > limit) return false;
+  return true;
+}
+
+let orderMutex = Promise.resolve();
+function enqueue(fn) {
+  const next = orderMutex.then(fn, fn);
+  orderMutex = next.catch(() => {});
+  return next;
+}
 
 /* ---------- HELPERS ---------- */
 const MIME = {
@@ -366,7 +389,115 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  // Admin routes
+  if (pathname.startsWith('/api/admin/')) {
+    const key = req.headers['x-admin-key'];
+    if (!ADMIN_KEY || !key || key !== ADMIN_KEY) {
+      sendJson(res, 401, { ok: false, error: 'Unauthorized.' });
+      return;
+    }
+
+    if (req.method === 'GET' && pathname === '/api/admin/orders') {
+      const orders = [];
+      try {
+        if (fs.existsSync(ORDERS_FILE)) {
+          const lines = fs.readFileSync(ORDERS_FILE, 'utf8').trim().split('\n');
+          for (const line of lines) {
+            if (line.trim()) orders.push(JSON.parse(line));
+          }
+        }
+      } catch (err) {
+        console.error('[admin] failed reading orders:', err.message);
+      }
+      sendJson(res, 200, { ok: true, orders });
+      return;
+    }
+
+    if (req.method === 'POST' && pathname === '/api/admin/order/cancel') {
+      let body;
+      try { body = JSON.parse(await readBody(req)); } catch { body = {}; }
+      const orderId = String(body.orderId || '').trim();
+      if (!orderId) {
+        sendJson(res, 400, { ok: false, error: 'orderId is required.' });
+        return;
+      }
+
+      const result = await enqueue(async () => {
+        if (!fs.existsSync(ORDERS_FILE)) return { ok: false, status: 404, error: 'Order not found.' };
+        const lines = fs.readFileSync(ORDERS_FILE, 'utf8').trim().split('\n');
+        const orders = lines.filter(l => l.trim()).map(l => JSON.parse(l));
+        const order = orders.find(o => o.orderId === orderId);
+        if (!order) return { ok: false, status: 404, error: 'Order not found.' };
+        if (order.status === 'cancelled') return { ok: false, status: 400, error: 'Order already cancelled.' };
+
+        order.status = 'cancelled';
+        order.cancelledAt = Date.now();
+
+        const stock = ensureStock();
+        for (const line of (order.lines || [])) {
+          const k = stockKey(line.id, line.size);
+          stock[k] = (Number(stock[k]) || 0) + (Number(line.qty) || 1);
+        }
+        saveStock(stock);
+        fs.writeFileSync(ORDERS_FILE, orders.map(o => JSON.stringify(o)).join('\n') + '\n');
+        return { ok: true, message: `Order ${orderId} cancelled and stock restored.`, stock };
+      });
+
+      sendJson(res, result.ok ? 200 : (result.status || 400), result);
+      return;
+    }
+
+    sendJson(res, 404, { ok: false, error: 'Admin endpoint not found.' });
+    return;
+  }
+
   if (req.method === 'POST' && pathname === '/api/order') {
+    const adminKey = req.headers['x-admin-key'];
+    if (adminKey) {
+      if (!ADMIN_KEY || adminKey !== ADMIN_KEY) {
+        sendJson(res, 401, { ok: false, error: 'Unauthorized.' });
+        return;
+      }
+      let body = {};
+      try { body = JSON.parse(await readBody(req)); } catch {}
+      const items = body && Array.isArray(body.items) && body.items.length ? body.items : null;
+
+      const result = await enqueue(async () => {
+        const current = ensureStock();
+        const next = items ? Object.assign({}, current) : defaultStock();
+        const updated = [];
+        if (items) {
+          for (const it of items) {
+            const id = Number(it && it.id);
+            const size = String((it && it.size) || '').trim();
+            const key = stockKey(id, size);
+            if (!(key in current)) continue;
+            const product = CATALOG.find(p => p.id === id);
+            const sizeInfo = product && product.sizes.find(s => s.size === size);
+            next[key] = (sizeInfo && sizeInfo.stock) || 1;
+            updated.push(key);
+          }
+        } else {
+          for (const k of Object.keys(next)) updated.push(k);
+        }
+        saveStock(next);
+        return { ok: true, message: updated.join(', '), stock: next };
+      });
+
+      sendJson(res, 200, {
+        ok: true,
+        message: items ? 'Restocked: ' + result.message : 'Full restock complete: ' + result.message,
+        stock: result.stock
+      });
+      return;
+    }
+
+    const clientIp = req.socket.remoteAddress || '';
+    if (!checkRateLimit(clientIp, 5, 60000)) {
+      sendJson(res, 429, { ok: false, error: 'Too many order attempts. Please wait a minute or order via WhatsApp.' });
+      return;
+    }
+
     let body;
     try {
       body = JSON.parse(await readBody(req));
@@ -381,30 +512,34 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
-    const result = placeOrder(validated);
+    const result = await enqueue(async () => {
+      const placed = placeOrder(validated);
+      if (!placed.ok) return placed;
+
+      const orderWithNotify = { ...placed.order, status: 'placed', placedAt: Date.now(), notified: false };
+      try {
+        orderWithNotify.notified = await notifyTelegram(placed.message);
+      } catch {
+        orderWithNotify.notified = false;
+      }
+      recordOrder(orderWithNotify);
+      return Object.assign({}, placed, { notified: orderWithNotify.notified });
+    });
+
     if (!result.ok) {
       sendJson(res, result.status, { ok: false, code: result.code, error: result.message, unavailable: result.unavailable });
       return;
     }
 
-    // Persist the order first so nothing is lost even if Telegram fails.
-    const orderWithNotify = { ...result.order, notified: false };
-    try {
-      orderWithNotify.notified = await notifyTelegram(result.message);
-    } catch {
-      orderWithNotify.notified = false;
-    }
-    recordOrder(orderWithNotify);
-
-    console.log(`[order] ${result.orderId} — total ৳${result.total} — notified: ${orderWithNotify.notified}`);
+    console.log(`[order] ${result.orderId} — total ৳${result.total} — notified: ${result.notified}`);
     sendJson(res, 200, {
       ok: true,
       orderId: result.orderId,
-      notified: orderWithNotify.notified,
+      notified: result.notified,
       subtotal: result.subtotal,
       delivery: result.delivery,
       total: result.total,
-      error: orderWithNotify.notified ? undefined : 'Your order was recorded, but the notification service is unavailable.'
+      error: result.notified ? undefined : 'Your order was recorded, but the notification service is unavailable.'
     });
     return;
   }

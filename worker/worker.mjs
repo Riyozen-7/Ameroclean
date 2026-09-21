@@ -10,7 +10,7 @@
      wrangler deploy                     # first deploy creates the DO
      wrangler secret put TELEGRAM_BOT_TOKEN
      wrangler secret put TELEGRAM_CHAT_ID
-     wrangler secret put RESTOCK_KEY     # admin key for the restock endpoint
+     wrangler secret put ADMIN_KEY       # admin key for the admin/restock endpoints
      # optional extra allowed frontend origins (comma-separated full origins;
      # required for a custom domain — GitHub Pages and *.pages.dev are built in):
      wrangler secret put ALLOWED_ORIGINS
@@ -22,7 +22,7 @@
      POST <worker>/api/order    — place an order / admin restock
 
    Restock (after a sale ships):
-     curl -X POST <worker>/api/order -H "X-Admin-Key: <RESTOCK_KEY>" \
+     curl -X POST <worker>/api/order -H "X-Admin-Key: <ADMIN_KEY>" \
           -H "Content-Type: application/json" -d '{}'                    # full restock
      -d '{"items":[{"id":2,"size":"M"}]}'                                # specific pieces
    ============================================ */
@@ -258,6 +258,20 @@ export class AmeroStore {
   constructor(ctx, env) {
     this.ctx = ctx;
     this.env = env;
+    this.ipRateMap = new Map();
+  }
+
+  checkRateLimit(ip, limit = 5, windowMs = 60000) {
+    if (!ip) return true;
+    const now = Date.now();
+    const entry = this.ipRateMap.get(ip);
+    if (!entry || now > entry.resetAt) {
+      this.ipRateMap.set(ip, { count: 1, resetAt: now + windowMs });
+      return true;
+    }
+    entry.count++;
+    if (entry.count > limit) return false;
+    return true;
   }
 
   // Current stock map (defaults until the first order/restock writes one).
@@ -291,6 +305,8 @@ export class AmeroStore {
   }
 
   async fetch(request) {
+    const { pathname } = new URL(request.url);
+
     // Real-time stock channel: instant sold-out to every open tab.
     const upgrade = request.headers.get('Upgrade');
     if (upgrade && upgrade.toLowerCase() === 'websocket') {
@@ -302,19 +318,91 @@ export class AmeroStore {
 
     // Live stock snapshot — read-only, served straight from the DO so the
     // storefront can show the same availability the order path enforces.
-    if (request.method === 'GET') {
+    if (request.method === 'GET' && pathname === '/api/stock') {
       return json(200, { ok: true, stock: await this.stockSnapshot() });
+    }
+
+    // Admin endpoints (guarded by the ADMIN_KEY / RESTOCK_KEY secret).
+    if (pathname.startsWith('/api/admin/')) {
+      const expected = this.env.ADMIN_KEY || this.env.RESTOCK_KEY || '';
+      if (!expected) return json(503, { ok: false, error: 'ADMIN_KEY is not configured on the Worker.' });
+      if (!secureEqual(request.headers.get('X-Admin-Key'), expected)) return json(401, { ok: false, error: 'Unauthorized.' });
+
+      if (request.method === 'GET' && pathname === '/api/admin/orders') {
+        const orders = (await this.ctx.storage.get('orders')) || [];
+        return json(200, { ok: true, orders });
+      }
+
+      if (request.method === 'POST' && pathname === '/api/admin/order/cancel') {
+        let body = {};
+        try { body = await request.json(); } catch {}
+        const orderId = String((body && body.orderId) || '').trim();
+        if (!orderId) return json(400, { ok: false, error: 'orderId is required.' });
+
+        let result = null;
+        await this.ctx.blockConcurrencyWhile(async () => {
+          const orders = (await this.ctx.storage.get('orders')) || [];
+          const order = orders.find(o => o.orderId === orderId);
+          if (!order) {
+            result = { ok: false, status: 404, error: 'Order not found.' };
+            return;
+          }
+          if (order.status === 'cancelled') {
+            result = { ok: false, status: 400, error: 'Order already cancelled.' };
+            return;
+          }
+          order.status = 'cancelled';
+          order.cancelledAt = Date.now();
+
+          const currentStock = (await this.ctx.storage.get('stock')) || defaultStock();
+          const nextStock = Object.assign({}, currentStock);
+          for (const line of (order.lines || [])) {
+            const key = stockKey(line.id, line.size);
+            nextStock[key] = (Number(nextStock[key]) || 0) + (Number(line.qty) || 1);
+          }
+          await this.ctx.storage.put('orders', orders);
+          await this.ctx.storage.put('stock', nextStock);
+          result = { ok: true, message: `Order ${orderId} cancelled and stock restored.`, stock: nextStock };
+        });
+
+        if (!result.ok) return json(result.status || 400, result);
+        this.broadcastStock(result.stock);
+        return json(200, result);
+      }
+
+      if (request.method === 'POST' && pathname === '/api/admin/stock/adjust') {
+        let body = {};
+        try { body = await request.json(); } catch {}
+        const id = Number(body && body.id);
+        const size = String((body && body.size) || '').trim();
+        const key = stockKey(id, size);
+        let nextStock = null;
+        await this.ctx.blockConcurrencyWhile(async () => {
+          const current = (await this.ctx.storage.get('stock')) || defaultStock();
+          nextStock = Object.assign({}, current);
+          if (typeof (body && body.stock) === 'number') {
+            nextStock[key] = Math.max(0, body.stock);
+          } else if (typeof (body && body.delta) === 'number') {
+            nextStock[key] = Math.max(0, (nextStock[key] || 0) + body.delta);
+          }
+          await this.ctx.storage.put('stock', nextStock);
+        });
+        this.broadcastStock(nextStock);
+        return json(200, { ok: true, stock: nextStock });
+      }
+
+      return json(404, { ok: false, error: 'Admin endpoint not found.' });
     }
 
     if (request.method !== 'POST') return json(405, { ok: false, error: 'Method not allowed.' });
 
-    // Admin restock endpoint (guarded by the RESTOCK_KEY secret).
-    //   curl -X POST <worker>/api/order -H "X-Admin-Key: <RESTOCK_KEY>" -H "Content-Type: application/json" -d '{}'
+    // Admin restock endpoint (guarded by the ADMIN_KEY / RESTOCK_KEY secret).
+    //   curl -X POST <worker>/api/order -H "X-Admin-Key: <ADMIN_KEY>" -H "Content-Type: application/json" -d '{}'
     //   -d '{"items":[{"id":2,"size":"M"},{"id":5,"size":"XL"}]}'  -> restock only those pieces
     //   -d '{}'                                                    -> full restock to catalog defaults
     if (request.headers.has('X-Admin-Key')) {
-      const expected = this.env.RESTOCK_KEY || '';
-      if (!expected) return json(503, { ok: false, error: 'RESTOCK_KEY is not configured on the Worker.' });
+      const expected = this.env.ADMIN_KEY || this.env.RESTOCK_KEY || '';
+      if (!expected) return json(503, { ok: false, error: 'ADMIN_KEY is not configured on the Worker.' });
       if (!secureEqual(request.headers.get('X-Admin-Key'), expected)) return json(401, { ok: false, error: 'Unauthorized.' });
 
       let body = null;
@@ -353,6 +441,12 @@ export class AmeroStore {
           : 'Full restock complete: ' + result.message,
         stock: result.stock
       });
+    }
+
+    // Rate limit public orders (5 attempts / min per IP)
+    const clientIp = request.headers.get('CF-Connecting-IP') || '';
+    if (!this.checkRateLimit(clientIp, 5, 60000)) {
+      return json(429, { ok: false, error: 'Too many order attempts. Please wait a minute or order via WhatsApp.' });
     }
 
     let payload;
@@ -396,8 +490,8 @@ export class AmeroStore {
 
     // Persist the order so it survives even if Telegram is down.
     const orders = (await this.ctx.storage.get('orders')) || [];
-    orders.push(Object.assign({}, result.order, { notified }));
-    await this.ctx.storage.put('orders', orders.slice(-200));
+    orders.push(Object.assign({}, result.order, { notified, status: 'placed', placedAt: Date.now() }));
+    await this.ctx.storage.put('orders', orders.slice(-500));
 
     return json(200, {
       ok: true,
@@ -450,55 +544,39 @@ export default {
       return new Response(null, { status: 204, headers: CORS_BASE });
     }
 
-    // Real-time stock channel — forward the WebSocket upgrade to the DO, which
-    // pushes an instant snapshot whenever a piece sells or is restocked.
+    // Real-time stock channel — forward the WebSocket upgrade to the DO
     if (pathname === '/api/stock/ws') {
       const id = env.AMERO_STORE.idFromName('amero');
       return env.AMERO_STORE.get(id).fetch(request);
     }
 
-    if (request.method === 'POST') {
-      let payload;
-      try {
-        payload = await request.json();
-      } catch {
-        return json(400, { ok: false, error: 'Invalid JSON payload.' });
-      }
-
+    // Forward API requests (stock, order, admin) to DO
+    if (pathname.startsWith('/api/admin/') || pathname === '/api/order' || pathname === '/api/stock') {
       const id = env.AMERO_STORE.idFromName('amero');
       const stub = env.AMERO_STORE.get(id);
-      try {
-const inner = await stub.fetch(new Request('https://amero.local/api/order', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(request.headers.has('X-Admin-Key') ? { 'X-Admin-Key': request.headers.get('X-Admin-Key') } : {})
-        },
-        body: JSON.stringify(payload)
-      }));
-        const headers = Object.assign({}, CORS_BASE);
-        if (origin) headers['Access-Control-Allow-Origin'] = origin;
-        return new Response(inner.body, { status: inner.status, headers });
-      } catch (err) {
-        console.error('[amero-api] order failed:', err.message);
-        return json(500, { ok: false, error: 'Internal error — please try again or order via WhatsApp.' });
+      const reqHeaders = {
+        'Content-Type': 'application/json',
+        'CF-Connecting-IP': request.headers.get('CF-Connecting-IP') || request.headers.get('X-Forwarded-For') || ''
+      };
+      if (request.headers.has('X-Admin-Key')) {
+        reqHeaders['X-Admin-Key'] = request.headers.get('X-Admin-Key');
       }
-    }
-
-    if (request.method === 'GET' && pathname === '/api/stock') {
-      const id = env.AMERO_STORE.idFromName('amero');
-      const stub = env.AMERO_STORE.get(id);
       try {
-        const inner = await stub.fetch(new Request('https://amero.local/api/stock', { method: 'GET' }));
+        const bodyText = request.method === 'POST' ? await request.text() : undefined;
+        const inner = await stub.fetch(new Request('https://amero.local' + pathname, {
+          method: request.method,
+          headers: reqHeaders,
+          body: bodyText
+        }));
         const headers = Object.assign({}, CORS_BASE, {
-          'Content-Type': 'application/json; charset=utf-8',
+          'Content-Type': inner.headers.get('Content-Type') || 'application/json; charset=utf-8',
           'Cache-Control': 'no-store'
         });
         if (origin) headers['Access-Control-Allow-Origin'] = origin;
         return new Response(inner.body, { status: inner.status, headers });
       } catch (err) {
-        console.error('[amero-api] stock fetch failed:', err.message);
-        return json(500, { ok: false, error: 'Could not load stock.' });
+        console.error('[amero-api] handler failed:', err.message);
+        return json(500, { ok: false, error: 'Internal error — please try again or order via WhatsApp.' });
       }
     }
 
