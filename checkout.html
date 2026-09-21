@@ -84,11 +84,11 @@
             </div>
           </div>
 
-          <div class="payment-instructions" id="paymentInstructions">
+          <div class="payment-instructions" id="paymentInstructions" aria-live="polite">
             <p id="paymentInstructionsText"></p>
           </div>
 
-          <div class="form-group txn-id-group" id="txnGroup">
+          <div class="form-group txn-id-group" id="txnGroup" aria-live="polite">
             <label for="txnId">Transaction ID</label>
             <input type="text" id="txnId" name="txnId" placeholder="Enter your Transaction ID" autocomplete="off">
             <span class="error-msg" id="errTxnId">Please enter the Transaction ID.</span>
@@ -177,7 +177,7 @@
 
       function currentDeliveryFee() {
         const area = document.getElementById('deliveryArea').value;
-        return area === 'chittagong' ? DELIVERY_FEES.chittagong : (area === 'outside' ? DELIVERY_FEES.outside : 0);
+        return DELIVERY_FEES[area] || 0;
       }
 
       function renderSummary() {
@@ -267,6 +267,20 @@
         document.getElementById(id).classList.remove('visible');
       }
 
+      function setFieldValidity(input, errorId, isValid) {
+        if (!isValid) {
+          input.classList.add('error');
+          input.setAttribute('aria-invalid', 'true');
+          input.setAttribute('aria-describedby', errorId);
+          showError(errorId);
+        } else {
+          input.classList.remove('error');
+          input.removeAttribute('aria-invalid');
+          input.removeAttribute('aria-describedby');
+          hideError(errorId);
+        }
+      }
+
       form.addEventListener('submit', async function (e) {
         e.preventDefault();
         updateNavCartCount();
@@ -287,26 +301,33 @@
         let valid = true;
 
         /* Name */
-        if (!name.value.trim()) { name.classList.add('error'); showError('errName'); valid = false; }
-        else { name.classList.remove('error'); hideError('errName'); }
+        const isNameValid = !!name.value.trim();
+        setFieldValidity(name, 'errName', isNameValid);
+        if (!isNameValid) valid = false;
 
         /* Phone — accepts 01XXXXXXXXX, +8801XXXXXXXXX, dashes and spaces */
         const cleanPhone = normalizePhone(phone.value);
-        if (!cleanPhone) { phone.classList.add('error'); showError('errPhone'); valid = false; }
-        else { phone.classList.remove('error'); hideError('errPhone'); }
+        const isPhoneValid = !!cleanPhone;
+        setFieldValidity(phone, 'errPhone', isPhoneValid);
+        if (!isPhoneValid) valid = false;
 
         /* Address */
-        if (!address.value.trim()) { address.classList.add('error'); showError('errAddress'); valid = false; }
-        else { address.classList.remove('error'); hideError('errAddress'); }
+        const isAddressValid = !!address.value.trim();
+        setFieldValidity(address, 'errAddress', isAddressValid);
+        if (!isAddressValid) valid = false;
 
         /* Delivery zone */
-        if (!area.value) { area.classList.add('error'); showError('errArea'); valid = false; }
-        else { area.classList.remove('error'); hideError('errArea'); }
+        const isAreaValid = !!area.value;
+        setFieldValidity(area, 'errArea', isAreaValid);
+        if (!isAreaValid) valid = false;
 
         /* Txn ID for bKash/Nagad */
         if (method === 'bkash' || method === 'nagad') {
-          if (!txnId.value.trim()) { txnId.classList.add('error'); showError('errTxnId'); valid = false; }
-          else { txnId.classList.remove('error'); hideError('errTxnId'); }
+          const isTxnValid = !!txnId.value.trim();
+          setFieldValidity(txnId, 'errTxnId', isTxnValid);
+          if (!isTxnValid) valid = false;
+        } else {
+          setFieldValidity(txnId, 'errTxnId', true);
         }
 
         if (!valid) {
@@ -344,15 +365,16 @@
           responseData = await res.json();
 
           if (!res.ok || !responseData.ok) {
-            // Server rejected (validation, stock) — keep the cart and offer WhatsApp.
+            // Server rejected (validation, stock) — remove unavailable items first so WhatsApp fallback is accurate.
             placeOrderBtn.disabled = false;
             placeOrderBtn.textContent = 'Place Order';
-            showOrderFailure(responseData.error || 'Your order could not be placed.');
-            if (responseData.unavailable) {
+            if (responseData.unavailable && responseData.unavailable.length) {
               responseData.unavailable.forEach(u => {
                 removeFromCart(u.id, u.size);
               });
+              renderSummary();
             }
+            showOrderFailure(responseData.error || 'Your order could not be placed.');
             return;
           }
         } catch (err) {

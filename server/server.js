@@ -79,7 +79,7 @@ const MIME = {
 
 function sendJson(res, status, data) {
   const body = JSON.stringify(data);
-  res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8' });
+  res.writeHead(status, Object.assign({ 'Content-Type': 'application/json; charset=utf-8' }, SECURITY_HEADERS));
   res.end(body);
 }
 
@@ -139,9 +139,21 @@ function defaultStock() {
 function ensureStock() {
   ensureDataDir();
   let stock = loadStock();
+  const defaults = defaultStock();
   if (!stock || typeof stock !== 'object') {
-    stock = defaultStock();
+    stock = defaults;
     fs.writeFileSync(STOCK_FILE, JSON.stringify(stock, null, 2));
+  } else {
+    let updated = false;
+    for (const [k, v] of Object.entries(defaults)) {
+      if (stock[k] === undefined) {
+        stock[k] = v;
+        updated = true;
+      }
+    }
+    if (updated) {
+      fs.writeFileSync(STOCK_FILE, JSON.stringify(stock, null, 2));
+    }
   }
   return stock;
 }
@@ -307,25 +319,39 @@ function recordOrder(order) {
 }
 
 /* ---------- STATIC FILES ---------- */
+const FORBIDDEN_PREFIXES = ['/server', '/worker', '/scripts', '/.git', '/.env', '/.wrangler'];
+const SECURITY_HEADERS = {
+  'X-Content-Type-Options': 'nosniff',
+  'X-Frame-Options': 'DENY',
+  'Referrer-Policy': 'strict-origin-when-cross-origin',
+  'Content-Security-Policy': "default-src 'self'; img-src 'self' data: https:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; connect-src 'self' https: wss:; script-src 'self' 'unsafe-inline';"
+};
+
 function serveStatic(req, res, urlPath) {
   if (urlPath === '/') urlPath = '/index.html';
 
-  const filePath = path.normalize(path.join(ROOT, urlPath));
-  if (filePath !== ROOT && !filePath.startsWith(ROOT + path.sep)) {
-    res.writeHead(403); res.end('Forbidden'); return;
+  const normalizedUrl = path.posix.normalize(urlPath);
+  const isForbidden = FORBIDDEN_PREFIXES.some(prefix => normalizedUrl.startsWith(prefix) || normalizedUrl.startsWith('/' + prefix)) ||
+                      normalizedUrl.split('/').some(segment => segment.startsWith('.'));
+
+  const filePath = path.normalize(path.join(ROOT, normalizedUrl));
+  if (isForbidden || (filePath !== ROOT && !filePath.startsWith(ROOT + path.sep))) {
+    res.writeHead(403, Object.assign({ 'Content-Type': 'text/plain; charset=utf-8' }, SECURITY_HEADERS));
+    res.end('Forbidden');
+    return;
   }
 
   fs.stat(filePath, (err, stat) => {
     if (err || !stat.isFile()) {
-      res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
+      res.writeHead(404, Object.assign({ 'Content-Type': 'text/plain; charset=utf-8' }, SECURITY_HEADERS));
       res.end('Not found');
       return;
     }
     const ext = path.extname(filePath).toLowerCase();
-    res.writeHead(200, {
+    res.writeHead(200, Object.assign({
       'Content-Type': MIME[ext] || 'application/octet-stream',
       'Cache-Control': ext === '.html' ? 'no-cache' : 'public, max-age=604800'
-    });
+    }, SECURITY_HEADERS));
     fs.createReadStream(filePath).pipe(res);
   });
 }

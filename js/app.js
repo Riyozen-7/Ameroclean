@@ -292,7 +292,7 @@ function normalizePhone(raw) {
   let p = String(raw || '').replace(/[^\d+]/g, '');
   if (p.startsWith('+880')) p = '0' + p.slice(4);
   else if (p.startsWith('880')) p = '0' + p.slice(3);
-  else if (/^\+8801[3-9]\d{8}$/.test(p)) p = p.slice(1);
+  else if (p.startsWith('+')) p = p.replace('+', '');
   return /^01[3-9]\d{8}$/.test(p) ? p : null;
 }
 
@@ -303,7 +303,17 @@ function findProduct(id) {
 // ---------- CART STATE (localStorage) ----------
 function getCart() {
   try {
-    return JSON.parse(localStorage.getItem('amero_cart')) || [];
+    const raw = JSON.parse(localStorage.getItem('amero_cart')) || [];
+    if (!Array.isArray(raw)) return [];
+    return raw.map(item => {
+      const p = findProduct(item.id);
+      if (!p) return item;
+      return Object.assign({}, item, {
+        name: p.name,
+        price: p.price,
+        img: p.img
+      });
+    });
   } catch {
     return [];
   }
@@ -423,7 +433,11 @@ function stockSocketLive() {
   return !!stockSocket && stockSocket.readyState === WS_OPEN;
 }
 
+let stockReconnectAttempts = 0;
+const MAX_STOCK_RECONNECT_ATTEMPTS = 5;
+
 function scheduleStockReconnect() {
+  if (stockReconnectAttempts >= MAX_STOCK_RECONNECT_ATTEMPTS) return;
   clearTimeout(stockReconnectTimer);
   stockReconnectTimer = setTimeout(connectStockSocket, stockReconnectDelay);
   stockReconnectDelay = Math.min(stockReconnectDelay * 2, 30000);
@@ -431,17 +445,25 @@ function scheduleStockReconnect() {
 
 function connectStockSocket() {
   if (typeof WebSocket === 'undefined') return;
+  // If running locally without an explicit ORDER_API_URL, local node server does not serve WS
+  const base = orderApiBase();
+  if (!base && (location.hostname === 'localhost' || location.hostname === '127.0.0.1')) {
+    return;
+  }
+  if (stockReconnectAttempts >= MAX_STOCK_RECONNECT_ATTEMPTS) return;
   if (stockSocket && stockSocket.readyState <= WS_OPEN) return;
   let ws;
   try {
     ws = new WebSocket(stockSocketUrl());
   } catch {
+    stockReconnectAttempts++;
     scheduleStockReconnect();
     return;
   }
   stockSocket = ws;
 
   ws.addEventListener('open', () => {
+    stockReconnectAttempts = 0;
     stockReconnectDelay = 1000;
     refreshLiveStock(); // reconcile anything missed while disconnected
   });
@@ -452,6 +474,7 @@ function connectStockSocket() {
   });
   ws.addEventListener('close', () => {
     if (stockSocket === ws) stockSocket = null;
+    stockReconnectAttempts++;
     scheduleStockReconnect();
   });
   ws.addEventListener('error', () => {

@@ -170,7 +170,8 @@
           const rem = stockRemaining(product.id, s.size);
           const out = rem <= 0;
           return `<button class="size-chip${s.size === selectedSize ? ' selected' : ''}${out ? ' sold-out' : ''}"
-                          data-size="${escapeHtml(s.size)}" ${out ? 'disabled' : ''}
+                          data-size="${escapeHtml(s.size)}" ${out ? 'disabled aria-disabled="true"' : ''}
+                          aria-label="Size ${escapeHtml(s.size)}${out ? ', Out of stock' : ''}"
                           aria-pressed="${s.size === selectedSize}">${escapeHtml(s.size)}${out ? ' · Out' : ''}</button>`;
         }).join('');
 

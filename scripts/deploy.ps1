@@ -61,7 +61,7 @@ $workerName = if ($env:WORKER_NAME) { $env:WORKER_NAME } else { 'amero-api' }
 
 # Deploy and capture the workers.dev URL (patch name into wrangler.toml first)
 $toml = Join-Path $root 'worker/wrangler.toml'
-(Get-Content $toml -Raw) -replace '^name = ".*"', "name = `"$workerName`"" | Set-Content $toml -NoNewline
+(Get-Content $toml -Raw) -replace '(?m)^name = ".*"', "name = `"$workerName`"" | Set-Content $toml -NoNewline
 
 Set-Location (Join-Path $root 'worker')
 $deployOut = wrangler deploy 2>&1

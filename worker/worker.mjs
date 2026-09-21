@@ -51,7 +51,7 @@ export function normalizePhone(raw) {
   let p = String(raw || '').replace(/[^\d+]/g, '');
   if (p.startsWith('+880')) p = '0' + p.slice(4);
   else if (p.startsWith('880')) p = '0' + p.slice(3);
-  else if (/^\+8801[3-9]\d{8}$/.test(p)) p = p.slice(1);
+  else if (p.startsWith('+')) p = p.replace('+', '');
   return /^01[3-9]\d{8}$/.test(p) ? p : null;
 }
 
@@ -233,14 +233,23 @@ export function isAllowedOrigin(origin, env) {
 const CORS_BASE = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'POST, GET, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type',
-  'Access-Control-Max-Age': '86400'
+  'Access-Control-Allow-Headers': 'Content-Type, X-Admin-Key',
+  'Access-Control-Max-Age': '86400',
+  'X-Content-Type-Options': 'nosniff',
+  'X-Frame-Options': 'DENY',
+  'Referrer-Policy': 'strict-origin-when-cross-origin'
 };
 
-function json(status, data) {
+function json(status, data, extraHeaders = {}) {
   return new Response(JSON.stringify(data), {
     status,
-    headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' }
+    headers: Object.assign({
+      'Content-Type': 'application/json; charset=utf-8',
+      'Cache-Control': 'no-store',
+      'X-Content-Type-Options': 'nosniff',
+      'X-Frame-Options': 'DENY',
+      'Referrer-Policy': 'strict-origin-when-cross-origin'
+    }, extraHeaders)
   });
 }
 
@@ -253,7 +262,22 @@ export class AmeroStore {
 
   // Current stock map (defaults until the first order/restock writes one).
   async stockSnapshot() {
-    return (await this.ctx.storage.get('stock')) || defaultStock();
+    const saved = await this.ctx.storage.get('stock');
+    const defaults = defaultStock();
+    if (!saved || typeof saved !== 'object') {
+      return defaults;
+    }
+    let changed = false;
+    const merged = Object.assign({}, defaults, saved);
+    for (const k of Object.keys(defaults)) {
+      if (saved[k] === undefined) {
+        changed = true;
+      }
+    }
+    if (changed) {
+      await this.ctx.storage.put('stock', merged);
+    }
+    return merged;
   }
 
   // Push the latest snapshot to every connected storefront tab. Uses the
