@@ -538,11 +538,16 @@ function clearCart() {
 
 // ---------- NAV CART COUNT ----------
 function updateNavCartCount() {
-  const el = document.getElementById('navCartCount');
-  if (!el) return;
+  const els = [
+    document.getElementById('navCartCount'),
+    document.getElementById('menuCartCount')
+  ];
   const count = getCartItemCount();
-  el.textContent = count;
-  el.classList.toggle('visible', count > 0);
+  els.forEach(el => {
+    if (!el) return;
+    el.textContent = count;
+    el.classList.toggle('visible', count > 0);
+  });
 }
 
 // ---------- TOAST NOTIFICATION ----------

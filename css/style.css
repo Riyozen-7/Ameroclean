@@ -292,6 +292,7 @@ input, select, textarea {
 /* Mobile menu toggle */
 .menu-toggle {
   display: none;
+  position: relative;
   flex-direction: column;
   align-items: center;
   justify-content: center;
@@ -308,6 +309,31 @@ input, select, textarea {
 .menu-toggle:hover {
   border-color: var(--warm-gray);
   background: var(--white);
+}
+
+.menu-cart-count {
+  position: absolute;
+  top: -6px;
+  right: -8px;
+  width: 18px;
+  height: 18px;
+  background: var(--accent);
+  color: var(--white);
+  border-radius: 50%;
+  font-size: 10px;
+  font-weight: var(--fw-semibold);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transform: scale(0.5);
+  transition: all var(--duration-fast) var(--ease-out);
+  pointer-events: none;
+}
+
+.menu-cart-count.visible {
+  opacity: 1;
+  transform: scale(1);
 }
 
 .menu-toggle span {

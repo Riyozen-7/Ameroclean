@@ -25,6 +25,7 @@
     </div>
     <button class="menu-toggle" id="menuToggle" aria-label="Toggle menu" aria-expanded="false" aria-controls="navLinks">
       <span></span><span></span><span></span>
+      <span class="menu-cart-count" id="menuCartCount">0</span>
     </button>
   </div>
   <div class="nav-backdrop" id="navBackdrop"></div>
